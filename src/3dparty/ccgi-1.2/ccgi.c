@@ -880,6 +880,13 @@ CGI_get_query(CGI_varlist *v) {
     return CGI_decode_query(v, getenv("QUERY_STRING"));
 }
 
+
+CGI_varlist *
+CGI_get_custom_value(CGI_varlist *v, const char *name) {
+	const char *value = getenv(name);
+	return CGI_add_var(v, name, value);
+}
+
 /*
  * CGI_get_post() reads field names and values from stdin and adds
  * them to variable list "v" (which may be null) and returns the

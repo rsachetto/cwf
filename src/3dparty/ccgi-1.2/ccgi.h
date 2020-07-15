@@ -47,6 +47,8 @@ CGI_varlist *CGI_get_all(const char *template);
 CGI_varlist *CGI_add_var(CGI_varlist *v, const char *varname,
     const char *value);
 
+CGI_varlist *CGI_get_custom_value(CGI_varlist *v, const char *name); 
+
 void CGI_free_varlist(CGI_varlist *v);
 
 CGI_value *CGI_lookup_all(CGI_varlist *v, const char *varname);
@@ -56,6 +58,7 @@ const char *CGI_lookup(CGI_varlist *v, const char *varname);
 const char *CGI_first_name(CGI_varlist *v);
 
 const char *CGI_next_name(CGI_varlist *v);
+
 
 void CGI_prefork_server(const char *host, int port, const char *pidfile,
     int maxproc, int minidle, int maxidle, int maxreq,
