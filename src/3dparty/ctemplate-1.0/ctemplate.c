@@ -47,7 +47,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <stdarg.h>
-#include <ctemplate.h>
+#include "ctemplate.h"
 
 /* To prevent infinite TMPL_INCLUDE cycles, we limit the depth */
 

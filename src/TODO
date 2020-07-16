@@ -1,0 +1,3 @@
+- We need a small regular expression lib to handle URL redirects
+- We need to decide the configuration format. Maybe a .ini file?
+
