@@ -4,10 +4,11 @@
 #include <string.h>
 
 #include "3dparty/ctemplate-1.0/ctemplate.h"
-#include "cwf.h"
 
 #define STB_DS_IMPLEMENTATION
 #include "3dparty/stb/stb_ds.h"
+
+#include "cwf.h"
 
 /*These are from ccgi*/
 static int hex(int digit) {
@@ -87,17 +88,25 @@ static void decode_query(request_item **v, const char *query) {
     free(buf);
 }
 
+static void get_post(request_item **v, int len) {
+
+	char *buf;
+
+	buf = (char *) malloc(len + 1);
+	if (fread(buf, 1, len, stdin) == len) {
+		buf[len] = 0;
+		decode_query(v, buf);
+	}
+	free(buf);
+}
 
 request * new_empty_request() {
 
-	request *req  = (request*) malloc(sizeof(request));
-	req->type = NULL;
-	req->env = NULL;
-	req->get = NULL;
-	req->post = NULL;
-	sh_new_arena(req->env);
-	sh_new_arena(req->get);
-	sh_new_arena(req->post);
+	request *req         = (request*) malloc(sizeof(request));
+	req->method          = NULL;
+	req->urlencoded_data = NULL;
+	req->data_type       = NULL;
+	sh_new_arena(req->urlencoded_data);
 
 	return req;
 
@@ -106,99 +115,119 @@ request * new_empty_request() {
 request * new_from_env_vars() {
 
 	request *req = new_empty_request();
-	shput(req->env, "HTTP_ACCEPT"          , getenv("HTTP_ACCEPT"));
-	shput(req->env, "HTTP_COOKIE"          , getenv("HTTP_COOKIE"));
-	shput(req->env, "HTTP_FORWARDED"       , getenv("HTTP_FORWARDED"));
-	shput(req->env, "HTTP_HOST"            , getenv("HTTP_HOST"));
-	shput(req->env, "HTTP_PROXY_CONNECTION", getenv("HTTP_PROXY_CONNECTION"));
-	shput(req->env, "HTTP_REFERER"         , getenv("HTTP_REFERER"));
-	shput(req->env, "HTTP_USER_AGENT"      , getenv("HTTP_USER_AGENT"));
-	shput(req->env, "REQUEST_METHOD"       , getenv("REQUEST_METHOD"));
-	shput(req->env, "REQUEST_METHOD"       , getenv("REQUEST_METHOD"));
-	shput(req->env, "REQUEST_SCHEME"       , getenv("REQUEST_SCHEME"));
-	shput(req->env, "REQUEST_URI"          , getenv("REQUEST_URI"));
-	shput(req->env, "DOCUMENT_URI"         , getenv("DOCUMENT_URI"));
-	shput(req->env, "REQUEST_FILENAME"     , getenv("REQUEST_FILENAME"));
-	shput(req->env, "SCRIPT_FILENAME"      , getenv("SCRIPT_FILENAME"));
-	shput(req->env, "LAST_MODIFIED"        , getenv("LAST_MODIFIED"));
-	shput(req->env, "SCRIPT_USER"          , getenv("SCRIPT_USER"));
-	shput(req->env, "SCRIPT_GROUP"         , getenv("SCRIPT_GROUP"));
-	shput(req->env, "PATH_INFO"            , getenv("PATH_INFO"));
-	shput(req->env, "QUERY_STRING"         , getenv("QUERY_STRING"));
-	shput(req->env, "IS_SUBREQ "           , getenv("IS_SUBREQ"));
-	shput(req->env, "THE_REQUEST"          , getenv("THE_REQUEST"));
-	shput(req->env, "REMOTE_ADDR"          , getenv("REMOTE_ADDR"));
-	shput(req->env, "REMOTE_PORT"          , getenv("REMOTE_PORT"));
-	shput(req->env, "REMOTE_HOST"          , getenv("REMOTE_HOST"));
-	shput(req->env, "REMOTE_USER"          , getenv("REMOTE_USER"));
-	shput(req->env, "REMOTE_IDENT"         , getenv("REMOTE_IDENT"));
-	shput(req->env, "SERVER_NAME"          , getenv("SERVER_NAME"));
-	shput(req->env, "SERVER_PORT"          , getenv("SERVER_PORT"));
-	shput(req->env, "SERVER_ADMIN"         , getenv("SERVER_ADMIN"));
-	shput(req->env, "SERVER_PROTOCOL"      , getenv("SERVER_PROTOCOL"));
-	shput(req->env, "DOCUMENT_ROOT"        , getenv("DOCUMENT_ROOT"));
-	shput(req->env, "AUTH_TYPE"            , getenv("AUTH_TYPE"));
-	shput(req->env, "CONTENT_TYPE "        , getenv("CONTENT_TYPE"));
-	shput(req->env, "HANDLER"              , getenv("HANDLER"));
-	shput(req->env, "HTTP2"                , getenv("HTTP2"));
-	shput(req->env, "HTTPS"                , getenv("HTTPS"));
-	shput(req->env, "IPV6"                 , getenv("IPV6"));
-	shput(req->env, "REQUEST_STATUS"       , getenv("REQUEST_STATUS"));
-	shput(req->env, "REQUEST_LOG_ID"       , getenv("REQUEST_LOG_ID"));
-	shput(req->env, "CONN_LOG_ID"          , getenv("CONN_LOG_ID"));
-	shput(req->env, "CONN_REMOTE_ADDR"     , getenv("CONN_REMOTE_ADDR"));
-	shput(req->env, "CONTEXT_PREFIX"       , getenv("CONTEXT_PREFIX"));
-	shput(req->env, "CONTEXT_DOCUMENT_ROOT", getenv("CONTEXT_DOCUMENT_ROOT"));
-	shput(req->env, "TIME_YEAR"            , getenv("TIME_YEAR"));
-	shput(req->env, "TIME_MON"             , getenv("TIME_MON"));
-	shput(req->env, "TIME_DAY"             , getenv("TIME_DAY"));
-	shput(req->env, "TIME_HOUR"      	   , getenv("TIME_HOUR"));
-	shput(req->env, "TIME_MIN"       	   , getenv("TIME_MIN"));
-	shput(req->env, "TIME_SEC"       	   , getenv("TIME_SEC"));
-	shput(req->env, "TIME_WDAY"      	   , getenv("TIME_WDAY"));
-	shput(req->env, "TIME"           	   , getenv("TIME"));
-	shput(req->env, "SERVER_SOFTWARE"	   , getenv("SERVER_SOFTWARE"));
-	shput(req->env, "API_VERSION"    	   , getenv("API_VERSION"));
+
+	shput(req->server_data, "HTTP_ACCEPT"          , getenv("HTTP_ACCEPT"));
+	shput(req->server_data, "HTTP_COOKIE"          , getenv("HTTP_COOKIE"));
+	shput(req->server_data, "HTTP_FORWARDED"       , getenv("HTTP_FORWARDED"));
+	shput(req->server_data, "HTTP_HOST"            , getenv("HTTP_HOST"));
+	shput(req->server_data, "HTTP_PROXY_CONNECTION", getenv("HTTP_PROXY_CONNECTION"));
+	shput(req->server_data, "HTTP_REFERER"         , getenv("HTTP_REFERER"));
+	shput(req->server_data, "HTTP_USER_AGENT"      , getenv("HTTP_USER_AGENT"));
+	shput(req->server_data, "CONTENT_LENGTH"       , getenv("CONTENT_LENGTH"));
+	shput(req->server_data, "REQUEST_METHOD"       , getenv("REQUEST_METHOD"));
+	shput(req->server_data, "REQUEST_METHOD"       , getenv("REQUEST_METHOD"));
+	shput(req->server_data, "REQUEST_SCHEME"       , getenv("REQUEST_SCHEME"));
+	shput(req->server_data, "REQUEST_URI"          , getenv("REQUEST_URI"));
+	shput(req->server_data, "DOCUMENT_URI"         , getenv("DOCUMENT_URI"));
+	shput(req->server_data, "REQUEST_FILENAME"     , getenv("REQUEST_FILENAME"));
+	shput(req->server_data, "SCRIPT_FILENAME"      , getenv("SCRIPT_FILENAME"));
+	shput(req->server_data, "LAST_MODIFIED"        , getenv("LAST_MODIFIED"));
+	shput(req->server_data, "SCRIPT_USER"          , getenv("SCRIPT_USER"));
+	shput(req->server_data, "SCRIPT_GROUP"         , getenv("SCRIPT_GROUP"));
+	shput(req->server_data, "PATH_INFO"            , getenv("PATH_INFO"));
+	shput(req->server_data, "QUERY_STRING"         , getenv("QUERY_STRING"));
+	shput(req->server_data, "IS_SUBREQ "           , getenv("IS_SUBREQ"));
+	shput(req->server_data, "THE_REQUEST"          , getenv("THE_REQUEST"));
+	shput(req->server_data, "REMOTE_ADDR"          , getenv("REMOTE_ADDR"));
+	shput(req->server_data, "REMOTE_PORT"          , getenv("REMOTE_PORT"));
+	shput(req->server_data, "REMOTE_HOST"          , getenv("REMOTE_HOST"));
+	shput(req->server_data, "REMOTE_USER"          , getenv("REMOTE_USER"));
+	shput(req->server_data, "REMOTE_IDENT"         , getenv("REMOTE_IDENT"));
+	shput(req->server_data, "SERVER_NAME"          , getenv("SERVER_NAME"));
+	shput(req->server_data, "SERVER_PORT"          , getenv("SERVER_PORT"));
+	shput(req->server_data, "SERVER_ADMIN"         , getenv("SERVER_ADMIN"));
+	shput(req->server_data, "SERVER_PROTOCOL"      , getenv("SERVER_PROTOCOL"));
+	shput(req->server_data, "DOCUMENT_ROOT"        , getenv("DOCUMENT_ROOT"));
+	shput(req->server_data, "AUTH_TYPE"            , getenv("AUTH_TYPE"));
+	shput(req->server_data, "CONTENT_TYPE "        , getenv("CONTENT_TYPE"));
+	shput(req->server_data, "HANDLER"              , getenv("HANDLER"));
+	shput(req->server_data, "HTTP2"                , getenv("HTTP2"));
+	shput(req->server_data, "HTTPS"                , getenv("HTTPS"));
+	shput(req->server_data, "IPV6"                 , getenv("IPV6"));
+	shput(req->server_data, "REQUEST_STATUS"       , getenv("REQUEST_STATUS"));
+	shput(req->server_data, "REQUEST_LOG_ID"       , getenv("REQUEST_LOG_ID"));
+	shput(req->server_data, "CONN_LOG_ID"          , getenv("CONN_LOG_ID"));
+	shput(req->server_data, "CONN_REMOTE_ADDR"     , getenv("CONN_REMOTE_ADDR"));
+	shput(req->server_data, "CONTEXT_PREFIX"       , getenv("CONTEXT_PREFIX"));
+	shput(req->server_data, "CONTEXT_DOCUMENT_ROOT", getenv("CONTEXT_DOCUMENT_ROOT"));
+	shput(req->server_data, "TIME_YEAR"            , getenv("TIME_YEAR"));
+	shput(req->server_data, "TIME_MON"             , getenv("TIME_MON"));
+	shput(req->server_data, "TIME_DAY"             , getenv("TIME_DAY"));
+	shput(req->server_data, "TIME_HOUR"      	   , getenv("TIME_HOUR"));
+	shput(req->server_data, "TIME_MIN"       	   , getenv("TIME_MIN"));
+	shput(req->server_data, "TIME_SEC"       	   , getenv("TIME_SEC"));
+	shput(req->server_data, "TIME_WDAY"      	   , getenv("TIME_WDAY"));
+	shput(req->server_data, "TIME"           	   , getenv("TIME"));
+	shput(req->server_data, "SERVER_SOFTWARE"	   , getenv("SERVER_SOFTWARE"));
+	shput(req->server_data, "API_VERSION"    	   , getenv("API_VERSION"));
+
+	req->server_data_len = shlen(req->server_data);
+
+	req->method = getenv("REQUEST_METHOD");
+
+	if(IS_GET(req)) {
+		decode_query(&req->urlencoded_data, getenv("QUERY_STRING"));
+	}
+	else if(IS_POST(req)) {
+
+		const char *env;
+		int len;
+
+		if ((env = getenv("CONTENT_TYPE")) != 0 
+				&& strncasecmp(env, "application/x-www-form-urlencoded", 33) == 0 
+				&& (env = getenv("CONTENT_LENGTH")) != 0 && (len = atoi(env)) > 0) {
+			get_post(&req->urlencoded_data, len);
+			req->data_type = "urlencoded";
+			req->data_len = shlen(req->urlencoded_data);
+		}
+		else if ((env = getenv("CONTENT_TYPE")) != 0 
+				&& strncasecmp(env, "application/json", 16) == 0 
+				&& (env = getenv("CONTENT_LENGTH")) != 0 && (len = atoi(env)) > 0) {
+			
+			req->data_type = "json";
+			
 
 
-	//TODO: check for GET
-	decode_query(&req->get, getenv("QUERY_STRING"));
-
+		}
+		else { //multipart
+			//TODO: handle multpart input (get from liccgi)
+			//
+		}
+	}
 
 	return req;
 
 }
 
+char *get_value(request_item *data, char *key) {
+	return shget(data, key);
+}
+
 int render_template(request *req, const char *template_path) {
 
-    //fputs("Content-type: text/html\r\n\r\n", stdout);
-    fputs("CONTENT-TYPE: text/plain\r\n\r\n", stdout);
-
-	for(int i = 0; i < shlen(req->env); i++) {
-	    fprintf(stdout, "%s %s\n", req->env[i].key, req->env[i].value);
-	}
-
-	for(int i = 0; i < shlen(req->get); i++) {
-	    fprintf(stdout, "%s %s\n", req->get[i].key, req->get[i].value);
-	}
+	fputs("Content-type: text/html\r\n\r\n", stdout);
 
 	int ret = 0;
-	/*
+
 	TMPL_varlist *varlist = 0;
 	TMPL_fmtlist *fmtlist;
 
-    CGI_varlist *cgi_varlist = 0;
-    const char *name;
-    CGI_value  *value;
+	const char *name;
+	CGI_value  *value;
 
-    cgi_varlist = CGI_get_query(cgi_varlist);
-
-	for (name = CGI_first_name(cgi_varlist); name != 0; name = CGI_next_name(cgi_varlist)) {
-		value = CGI_lookup_all(cgi_varlist, name);
-		varlist = TMPL_add_var(varlist, name, value[0], 0);
+	for(int i = 0; i < shlen(req->urlencoded_data); i++) {
+		varlist = TMPL_add_var(varlist, req->urlencoded_data[i].key, req->urlencoded_data[i].value, 0);
 	}
-
-    CGI_free_varlist(cgi_varlist); 
 
 	fmtlist = TMPL_add_fmt(0, "entity", TMPL_encode_entity);
 	TMPL_add_fmt(fmtlist, "url", TMPL_encode_url);
@@ -206,7 +235,7 @@ int render_template(request *req, const char *template_path) {
 
 	TMPL_free_fmtlist(fmtlist);
 	TMPL_free_varlist(varlist);
-	*/
-	
+
+
 	return ret;
 }
