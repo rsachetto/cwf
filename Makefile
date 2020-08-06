@@ -1,6 +1,6 @@
 
 all:
 	cd src/ &&  $(MAKE) && cd ..
-	gcc main.c src/libcwf.a -o cwf.cgi
-	cp cwf.cgi /usr/pkg/libexec/cgi-bin/
+	gcc -g main.c src/libcwf.a -o cwf.cgi
+	cp cwf.cgi /usr/lib/cgi-bin/
 

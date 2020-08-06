@@ -195,7 +195,6 @@ request * new_from_env_vars() {
 				&& (env = getenv("CONTENT_LENGTH")) != 0 && (len = atoi(env)) > 0) {
 			
 			req->data_type = "json";
-			
 
 
 		}
@@ -209,8 +208,17 @@ request * new_from_env_vars() {
 
 }
 
-char *get_value(request_item *data, char *key) {
-	return shget(data, key);
+char * SERVER(request *req, char *key) {
+	return shget(req->server_data, key);
+}
+
+char * GET(request *req, char *key) {
+
+	if(IS_GET(req)) {
+		return shget(req->urlencoded_data, key);
+	}
+
+	return NULL;
 }
 
 int render_template(request *req, const char *template_path) {
