@@ -177,6 +177,8 @@ request * new_from_env_vars() {
 
 	if(IS_GET(req)) {
 		decode_query(&req->urlencoded_data, getenv("QUERY_STRING"));
+		req->data_type = "urlencoded";
+		req->data_len = shlen(req->urlencoded_data);
 	}
 	else if(IS_POST(req)) {
 

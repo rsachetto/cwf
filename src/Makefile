@@ -8,7 +8,7 @@ OPENSSL_INCLUDE = /usr/include
 
 CRYPT = crypt.o
 
-CFLAGS = -g -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
+CFLAGS = $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
 
 libcwf.a: cwf.o ctemplate.o ccgi.o prefork.o json.o $(CRYPT)
 	ar r libcwf.a cwf.o ctemplate.o ccgi.o prefork.o json.o $(CRYPT)
@@ -23,7 +23,7 @@ ccgi.o: 3dparty/ccgi-1.2/ccgi.c 3dparty/ccgi-1.2/ccgi.h
 	gcc $(CFLAGS) -c 3dparty/ccgi-1.2/ccgi.c
 
 prefork.o: 3dparty/ccgi-1.2/prefork.c
-	gcc $(CFLAGS) -g -c 3dparty/ccgi-1.2/prefork.c
+	gcc $(CFLAGS) -c 3dparty/ccgi-1.2/prefork.c
 
 crypt.o: 3dparty/ccgi-1.2/crypt.c 3dparty/ccgi-1.2/ccgi.h
 	gcc $(CFLAGS) -c  3dparty/ccgi-1.2/crypt.c
