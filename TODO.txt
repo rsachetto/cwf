@@ -3,6 +3,9 @@ execute the function to handle the endpoint
 try to work with django like urls
 https://docs.djangoproject.com/en/3.0/topics/http/urls/
 
+Pass a dictionary with key = parameter value = (type, value) to the endpoint
+
+
 Port to use FastCGI:
 https://fastcgi-archives.github.io/
 
