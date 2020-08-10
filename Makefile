@@ -3,13 +3,13 @@ all:
 	cd src/ &&  $(MAKE) && cd ..
 	gcc main.c src/libcwf.a -o cwf.cgi -ldl
 	cp cwf.cgi /usr/lib/cgi-bin/
-	gcc endpoints.c -fPIC -shared -o libendpoints.so
+	gcc src/endpoints.c -fPIC -shared -o libendpoints.so
 
 debug:
 	cd src/ &&  $(MAKE) EXTRA_C_FLAGS=-g  && cd ..
-	gcc -g main.c src/libcwf.a -o cwf.cgi -ldl
+	gcc -g -DGDB_DEBUG main.c src/libcwf.a -o cwf.cgi -ldl
 	cp cwf.cgi /usr/lib/cgi-bin/
-	gcc -g endpoints.c -fPIC -shared -o libendpoints.so
+	gcc -g src/endpoints.c -fPIC -shared -o libendpoints.so
 
 clean:
 	rm *.so

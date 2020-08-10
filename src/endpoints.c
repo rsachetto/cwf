@@ -15,6 +15,4 @@ ENDPOINT(site_index) {
 	}
 
 	return 1;
-
 }
-

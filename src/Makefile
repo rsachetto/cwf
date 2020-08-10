@@ -10,11 +10,14 @@ CRYPT = crypt.o
 
 CFLAGS = $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
 
-libcwf.a: cwf.o ctemplate.o ccgi.o prefork.o json.o $(CRYPT)
-	ar r libcwf.a cwf.o ctemplate.o ccgi.o prefork.o json.o $(CRYPT)
+OBJS = cwf.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o
+libcwf.a: $(OBJS) $(CRYPT)
+	ar r libcwf.a $(OBJS) $(CRYPT)
 	ranlib libcwf.a
 
-cwf.o: cwf.c cwf.h
+cwf.o: cwf.c cwf.h 
+
+ini_parse.o: ini_parse.c ini_parse.h
 
 ctemplate.o: 3dparty/ctemplate-1.0/ctemplate.c 3dparty/ctemplate-1.0/ctemplate.h
 	gcc $(CFLAGS) -c 3dparty/ctemplate-1.0/ctemplate.c
@@ -30,6 +33,9 @@ crypt.o: 3dparty/ccgi-1.2/crypt.c 3dparty/ccgi-1.2/ccgi.h
 
 json.o: 3dparty/json/json.c 3dparty/json/json.h
 	gcc $(CFLAGS) -c 3dparty/json/json.c
+
+ini.o: 3dparty/ini/ini.c 3dparty/ini/ini.h
+	gcc $(CFLAGS) -c 3dparty/ini/ini.c
 
 clean:
 	rm -f *.o *.a */*.o
