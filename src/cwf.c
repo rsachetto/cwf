@@ -130,46 +130,49 @@ void generate_default_404_header() {
 }
 
 //TODO: we can parse the templated url here
-endpoint_config *get_endpoint_config(char *URL, endpoint_config_item *endpoints_cfg) {
-    assert(URL);
+endpoint_config *get_endpoint_config(char *REQUEST_URI, char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
 
-    char *str = URL;
-
-    assert(*str == '/');
-
+	char *str = REQUEST_URI;
 
 	endpoint_config *it;
-	char  *tmp;
+	char  *tmp = NULL;
 
-    if(strlen(str) > 1) {
-        str = str + 1;
-    } else {
-		tmp = strdup("/");
-    }
+	int uri_len = strlen(REQUEST_URI);
 
-	char *question_mark = strchr(str, '?');
+	if(uri_len > 1) {
+		str = str + 1;
+	}
 
-    if(ENDSWITH(str, '/')) {
-        tmp = strndup(str, strlen(str) - 1);
-
-    } else if (question_mark) {		
+	if(!*QUERY_STRING) {
+		//TODO: parse the parameters needed for this endpoint if any
+		char *first_slash = strchr(str, '/');
+		if(first_slash) {
+			if(uri_len > 1) {
+				tmp = strndup(str, (int)(first_slash - str));
+			}
+			else {
+				tmp = strdup(str);
+			}
+		} else {
+			tmp = strdup(str);
+		}
+	}
+	else {
+		char *question_mark = strchr(str, '?');
 		int q_index = (int)(question_mark - str);
-        tmp = strndup(str, q_index);
+		tmp = strndup(str, q_index);
 
 		if(!*tmp) {
 			free(tmp);
 			tmp = strdup("/");
 		}
-    }
-	else {
-        tmp = strdup(str);
 	}
-   
+
 	it = shget(endpoints_cfg, tmp);
 
 	free(tmp);
 
-    return it;
+	return it;
 }
 
 request *new_from_env_vars() {

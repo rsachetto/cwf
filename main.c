@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 
-	endpoint_config *endpoint_config = get_endpoint_config(SERVER(req, "REQUEST_URI"), endpoint_configs);
+	endpoint_config *endpoint_config = get_endpoint_config(SERVER(req, "REQUEST_URI"), SERVER(req, "QUERY_STRING"), endpoint_configs);
 
 	char *endpoint_name = NULL;
 
