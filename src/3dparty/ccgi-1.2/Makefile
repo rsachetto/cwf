@@ -7,7 +7,7 @@ OPENSSL_INCLUDE = /usr/include
 
 CRYPT = crypt.o
 
-CFLAGS = -std=c99 -I . -I $(OPENSSL_INCLUDE)
+CFLAGS = -std=c99 -D_DEFAULT_SOURCE  -I . -I $(OPENSSL_INCLUDE)
 
 libccgi.a: ccgi.o prefork.o $(CRYPT)
 	ar r libccgi.a ccgi.o prefork.o $(CRYPT)

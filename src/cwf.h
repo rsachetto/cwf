@@ -57,7 +57,7 @@ request *new_from_env_vars();
 
 endpoint_config *new_endpoint_config();
 endpoint_config_item *new_endpoint_config_hash();
-char *get_endpoint(char *URL, endpoint_config_item *configs);
+endpoint_config *get_endpoint_config(char *URL, endpoint_config_item *configs);
 
 void generate_default_404_header();
 #endif /* __CWF_H */

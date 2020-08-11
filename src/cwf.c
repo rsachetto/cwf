@@ -130,31 +130,46 @@ void generate_default_404_header() {
 }
 
 //TODO: we can parse the templated url here
-char *get_endpoint(char *URL, struct endpoint_config_item_t *endpoints_cfg) {
+endpoint_config *get_endpoint_config(char *URL, endpoint_config_item *endpoints_cfg) {
     assert(URL);
 
     char *str = URL;
 
     assert(*str == '/');
 
+
+	endpoint_config *it;
+	char  *tmp;
+
     if(strlen(str) > 1) {
         str = str + 1;
     } else {
-        return shget(endpoints_cfg, "/")->function;
+		tmp = strdup("/");
     }
 
-	char *ret, *tmp;
+	char *question_mark = strchr(str, '?');
 
     if(ENDSWITH(str, '/')) {
         tmp = strndup(str, strlen(str) - 1);
 
-    } else {
-        tmp = strndup(str, strlen(str) - 1);
+    } else if (question_mark) {		
+		int q_index = (int)(question_mark - str);
+        tmp = strndup(str, q_index);
+
+		if(!*tmp) {
+			free(tmp);
+			tmp = strdup("/");
+		}
     }
-    
-	ret = shget(endpoints_cfg, tmp)->function;
+	else {
+        tmp = strdup(str);
+	}
+   
+	it = shget(endpoints_cfg, tmp);
+
 	free(tmp);
-	return ret;
+
+    return it;
 }
 
 request *new_from_env_vars() {

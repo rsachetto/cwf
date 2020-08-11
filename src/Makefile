@@ -8,7 +8,7 @@ OPENSSL_INCLUDE = /usr/include
 
 CRYPT = crypt.o
 
-CFLAGS = $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
+CFLAGS = -fPIC $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
 
 OBJS = cwf.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o
 libcwf.a: $(OBJS) $(CRYPT)
@@ -16,8 +16,10 @@ libcwf.a: $(OBJS) $(CRYPT)
 	ranlib libcwf.a
 
 cwf.o: cwf.c cwf.h 
+	gcc $(CFLAGS) -c cwf.c
 
 ini_parse.o: ini_parse.c ini_parse.h
+	gcc $(CFLAGS) -c ini_parse.c
 
 ctemplate.o: 3dparty/ctemplate-1.0/ctemplate.c 3dparty/ctemplate-1.0/ctemplate.h
 	gcc $(CFLAGS) -c 3dparty/ctemplate-1.0/ctemplate.c

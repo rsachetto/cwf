@@ -16,3 +16,11 @@ ENDPOINT(site_index) {
 
 	return 1;
 }
+
+ENDPOINT(info) {
+	
+	render_template(request, "/home/sachetto/cwf/template.tmpl");
+
+	return 1;
+}
+
