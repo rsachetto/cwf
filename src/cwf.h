@@ -11,8 +11,11 @@
 typedef enum {
 	INT, 
 	STRING,
-	FLOAT
+	FLOAT,
+	INVALID
 } parameter_type;
+
+typedef char* char_array;
 
 typedef struct {
 	char *name;
@@ -23,7 +26,7 @@ typedef struct {
 typedef struct endpoint_config_t{
 	char *function;
 	url_params *params;
-	bool error_parsing;
+	char_array error;
 } endpoint_config;
 
 typedef struct endpoint_config_item_t {
@@ -58,7 +61,7 @@ request *new_from_env_vars();
 
 endpoint_config *new_endpoint_config();
 endpoint_config_item *new_endpoint_config_hash();
-endpoint_config *get_endpoint_config(char *REQUEST_URI, char *QUERY_STRING, endpoint_config_item *configs);
+endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *configs);
 void add_params_to_request(request *req, url_params *params);
 
 void generate_default_404_header();

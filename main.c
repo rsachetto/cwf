@@ -10,6 +10,8 @@
 
 #define ENDPOINTS_FILE "/home/sachetto/cwf/endpoints.ini"
 
+bool debug_server = true;
+
 #ifdef GDB_DEBUG
 void wait_for_gdb_to_attach() {
     int is_waiting = 1;
@@ -57,21 +59,32 @@ int main(int argc, char **argv) {
 
 		if(error != NULL) {
 			generate_default_404_header();
-			fprintf(stdout, "\n%s function not found in the provided in library %s. Error from dlsym %s\n", endpoint_name,
+			if(debug_server)
+				fprintf(stdout, "\n%s function not found in the provided in library %s. Error from dlsym %s\n", endpoint_name,
 					ENDPOINT_LIB_PATH, error);
 			return 0;
 		}
 	}
 	else {
 		generate_default_404_header();
-		fprintf(stdout, "\nNo configured endpoint for the provided URL %s<br/> Check your endpoints config file (%s)", SERVER(req, "REQUEST_URI"), ENDPOINTS_FILE);
+		if(debug_server)
+			fprintf(stdout, "\nNo configured endpoint for the provided URL %s<br/> Check your endpoints config file (%s)", SERVER(req, "REQUEST_URI"), ENDPOINTS_FILE);
 		return 0;
 	}
 
-	//TODO: include an error message on the endpoint_config
-	//TODO: if error do not call the endpoint function!!
-	if(endpoint_config->params && !endpoint_config->error_parsing) {
-		add_params_to_request(req, endpoint_config->params);
+	if(endpoint_config->params) {
+		if(!endpoint_config->error) {
+			add_params_to_request(req, endpoint_config->params);
+		}
+		else {
+		//TODO: include an error message on the endpoint_config
+		generate_default_404_header();
+
+		if(debug_server)		
+			fprintf(stdout, "<h1> Error parsing parameters for endpoint [%s] with URL %s</h1><h2>Errors:</h2> <h2 style=\"color:red;\">%s</h2> ", endpoint_name, SERVER(req, "REQUEST_URI"), endpoint_config->error);
+		return 0;
+
+		}
 	}
 
     endpoint_function(req, NULL);

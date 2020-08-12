@@ -169,11 +169,15 @@ static bool is_float(char *float_char) {
 	return true;
 }
 
+static void concat_error_msg(char_array *current_error, char *error_to_add) {
+	for(int i = 0; i < strlen(error_to_add); ++i) {
+		arrpush(*current_error, error_to_add[i]);
+	}
+}
 
+endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
 
-endpoint_config *get_endpoint_config(char *REQUEST_URI, char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
-
-	char *str = REQUEST_URI;
+	char *str = (char*)REQUEST_URI;
 
 	endpoint_config *it;
 	char  *tmp = NULL;
@@ -185,7 +189,6 @@ endpoint_config *get_endpoint_config(char *REQUEST_URI, char *QUERY_STRING, endp
 	}
 
 	if(!*QUERY_STRING) {
-		//TODO: parse the parameters needed for this endpoint if any
 		char *first_slash = strchr(str, '/');
 		if(first_slash) {
 			if(uri_len > 1) {
@@ -202,50 +205,67 @@ endpoint_config *get_endpoint_config(char *REQUEST_URI, char *QUERY_STRING, endp
 
 		if(it && it->params) {
 
-			int expected_slashes = arrlen(it->params) - 1;
+			int expected_params = arrlen(it->params);
+			char err[1024];
 
-			if(ENDSWITH(first_slash, '/')) {
-				expected_slashes++;
+			if(first_slash) {
+
+				char *aux = strdup(first_slash + 1);
+
+				char * pch;
+				pch = strtok (aux, "/");
+				int num_params = 0;
+
+				while (pch != NULL) {
+					url_params url_params;
+					if(num_params < expected_params) {
+						url_params = it->params[num_params];
+					}
+					else {
+						sprintf(err, "Number of parameters exceed the configured number of parameters (%d).\n", expected_params);
+						concat_error_msg(&(it->error), err);
+						break;
+					}	
+
+					switch (url_params.type) {
+						case STRING:
+							break;
+						case INT:
+							if(!is_int(pch)) {
+								sprintf(err, "%s is configured to be an integer but %s is not a valid integer.\n", url_params.name, pch);
+								concat_error_msg(&(it->error), err);
+							}
+							break;
+						case FLOAT:
+							if(!is_float(pch)) {
+								sprintf(err, "%s is configured to be a float but %s is not a valid float.\n", url_params.name, pch);
+								concat_error_msg(&(it->error), err);
+							}
+							break;
+						default:
+							sprintf(err, "%s is configured to an invalid type. Valid types are i, s or f.\n", url_params.name);
+							concat_error_msg(&(it->error), err);
+							break;
+					}
+
+					it->params[num_params].value = strdup(pch);
+
+					num_params++;
+
+					pch = strtok (NULL, "/");
+				}
+
+				free(aux);
+
+				if(num_params != expected_params) {
+					sprintf(err, "Number of parameters are different from the configured number of parameters (received %d, expected %d).\n", num_params, expected_params);
+					concat_error_msg(&(it->error), err);
+				}
 			}
+			else {
+				sprintf(err, "Number of parameters are different from the configured number of parameters (received 0, expected %d).\n", expected_params);
+				concat_error_msg(&(it->error), err);
 
-			char *aux = first_slash + 1;
-
-			char * pch;
-			pch = strtok (aux, "/");
-			int num_slashes = 0;
-
-			while (pch != NULL) {
-				url_params url_params;
-				if(num_slashes < arrlen(it->params)) {
-					url_params = it->params[num_slashes];
-				}
-				else {
-					//ERROR
-					//TODO: maybe add a error message here 
-					it->error_parsing = true;
-					break;
-				}	
-
-				switch (url_params.type) {
-					case STRING:
-						break;
-					case INT:
-						if(!is_int(pch)) it->error_parsing = true;
-						break;
-					case FLOAT:
-						if(!is_float(pch)) it->error_parsing = true;
-						break;
-					default:
-						//ERROR
-						it->error_parsing = true;
-						break;
-				}
-
-				it->params[num_slashes].value = strdup(pch);
-				
-				num_slashes++;
-
-				pch = strtok (NULL, "/");
 			}
 
 		} 
@@ -270,7 +290,6 @@ endpoint_config *get_endpoint_config(char *REQUEST_URI, char *QUERY_STRING, endp
 }
 
 void add_params_to_request(request *req, url_params *params) {
-
 	for(int i = 0; i < arrlen(params); i++) {
 		shput(req->urlencoded_data, params[i].name, strdup(params[i].value)); 
 	}

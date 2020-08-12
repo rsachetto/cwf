@@ -23,7 +23,6 @@ int parse_endpoint_configuration(void* user, const char* section, const char* na
 
 	if(!endpoint_cfg) {
 		endpoint_cfg = new_endpoint_config();
-		endpoint_cfg->error_parsing = false;
 		shput(*config_hash, current_section, endpoint_cfg);
 	}
 	
@@ -46,8 +45,7 @@ int parse_endpoint_configuration(void* user, const char* section, const char* na
 				url_params.type = FLOAT;
 				break;
 			default: 
-				endpoint_cfg->error_parsing = true;
-				fprintf(stderr, "Invalid parameter type %s\n", value);
+				url_params.type = INVALID;
 				break;
 		}				
 
