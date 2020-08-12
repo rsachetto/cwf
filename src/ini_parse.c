@@ -23,14 +23,35 @@ int parse_endpoint_configuration(void* user, const char* section, const char* na
 
 	if(!endpoint_cfg) {
 		endpoint_cfg = new_endpoint_config();
+		endpoint_cfg->error_parsing = false;
 		shput(*config_hash, current_section, endpoint_cfg);
 	}
 	
 	if(strcmp(name, "function") == 0) {
 		endpoint_cfg->function = strdup(value);
 	}
-	if(strcmp(name, "url_template") == 0) {
-		endpoint_cfg->url_template = strdup(value);
+	else {
+		
+		url_params url_params;
+		url_params.name = strdup(name);
+		
+		switch(*value) {
+			case 's':
+				url_params.type = STRING;
+				break;
+			case 'i':
+				url_params.type = INT;
+				break;
+			case 'f':
+				url_params.type = FLOAT;
+				break;
+			default: 
+				endpoint_cfg->error_parsing = true;
+				fprintf(stderr, "Invalid parameter type %s\n", value);
+				break;
+		}				
+
+		arrput(endpoint_cfg->params, url_params);
 	}
 
 	return 1;

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "3dparty/ctemplate-1.0/ctemplate.h"
 
@@ -129,32 +130,150 @@ void generate_default_404_header() {
     fprintf(stdout, "Content-type: text/html\r\n\r\n");
 }
 
-//TODO: we can parse the templated url here
-char *get_endpoint(char *URL, struct endpoint_config_item_t *endpoints_cfg) {
-    assert(URL);
+static bool is_int(char *int_char) {
+	int len = strlen(int_char);
 
-    char *str = URL;
+	if(len == 0) return false;
 
-    assert(*str == '/');
-
-    if(strlen(str) > 1) {
-        str = str + 1;
-    } else {
-        return shget(endpoints_cfg, "/")->function;
+    for (int i = 0; i < len; ++i) {
+        if (!isdigit(int_char[i]))  {
+            return false;
+        }
     }
 
-	char *ret, *tmp;
+	return true;
+}
 
-    if(ENDSWITH(str, '/')) {
-        tmp = strndup(str, strlen(str) - 1);
+static bool is_float(char *float_char) {
 
-    } else {
-        tmp = strndup(str, strlen(str) - 1);
+	int len = strlen(float_char);
+
+	if(len == 0) return false;
+
+	bool dot_found = false;
+
+    for (int i = 0; i < len; ++i) {
+
+		if(float_char[i] == '.') {
+			if(!dot_found) dot_found = true;
+			else return false;
+
+			continue;
+		}
+
+        if (!isdigit(float_char[i]))  {
+            return false;
+        }
     }
-    
-	ret = shget(endpoints_cfg, tmp)->function;
+
+	return true;
+}
+
+
+
+endpoint_config *get_endpoint_config(char *REQUEST_URI, char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
+
+	char *str = REQUEST_URI;
+
+	endpoint_config *it;
+	char  *tmp = NULL;
+
+	int uri_len = strlen(REQUEST_URI);
+
+	if(uri_len > 1) {
+		str = str + 1;
+	}
+
+	if(!*QUERY_STRING) {
+		//TODO: parse the parameters needed for this endpoint if any
+		char *first_slash = strchr(str, '/');
+		if(first_slash) {
+			if(uri_len > 1) {
+				tmp = strndup(str, (int)(first_slash - str));
+			}
+			else {
+				tmp = strdup(str);
+			}
+		} else {
+			tmp = strdup(str);
+		}
+
+		it = shget(endpoints_cfg, tmp);
+
+		if(it && it->params) {
+
+			int expected_slashes = arrlen(it->params) - 1;
+
+			if(ENDSWITH(first_slash, '/')) {
+				expected_slashes++;
+			}
+
+			char *aux = first_slash + 1;
+
+			char * pch;
+			pch = strtok (aux, "/");
+			int num_slashes = 0;
+
+			while (pch != NULL) {
+				url_params url_params;
+				if(num_slashes < arrlen(it->params)) {
+					url_params = it->params[num_slashes];
+				}
+				else {
+					//ERROR
+					//TODO: maybe add a error message here 
+					it->error_parsing = true;
+					break;
+				}	
+
+				switch (url_params.type) {
+					case STRING:
+						break;
+					case INT:
+						if(!is_int(pch)) it->error_parsing = true;
+						break;
+					case FLOAT:
+						if(!is_float(pch)) it->error_parsing = true;
+						break;
+					default:
+						//ERROR
+						it->error_parsing = true;
+						break;
+				}
+
+				it->params[num_slashes].value = strdup(pch);
+				
+				num_slashes++;
+
+				pch = strtok (NULL, "/");
+			}
+
+		} 
+
+	}
+	else {
+		char *question_mark = strchr(str, '?');
+		int q_index = (int)(question_mark - str);
+		tmp = strndup(str, q_index);
+
+		if(!*tmp) {
+			free(tmp);
+			tmp = strdup("/");
+		}
+
+		it = shget(endpoints_cfg, tmp);
+	}
+
 	free(tmp);
-	return ret;
+	return it;
+
+}
+
+void add_params_to_request(request *req, url_params *params) {
+
+	for(int i = 0; i < arrlen(params); i++) {
+		shput(req->urlencoded_data, params[i].name, strdup(params[i].value)); 
+	}
 }
 
 request *new_from_env_vars() {
@@ -284,8 +403,6 @@ int render_template(request *req, const char *template_path) {
 
 endpoint_config *new_endpoint_config() {
 	endpoint_config *config = calloc(1, sizeof(endpoint_config));
-	sh_new_arena(config->parsed_params);
-	shdefault(config->parsed_params, NULL);
 	return config;
 }
 

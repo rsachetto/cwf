@@ -8,6 +8,8 @@
 #include "src/endpoints.h"
 #include "src/ini_parse.h"
 
+#define ENDPOINTS_FILE "/home/sachetto/cwf/endpoints.ini"
+
 #ifdef GDB_DEBUG
 void wait_for_gdb_to_attach() {
     int is_waiting = 1;
@@ -34,8 +36,7 @@ int main(int argc, char **argv) {
     endpoint_fn *endpoint_function;
 
     // TODO: here we have to parse the URL and configure the correct endpoint for the function
-
-	char *config_file = "endpoints.ini";
+	char *config_file = ENDPOINTS_FILE;
 	endpoint_config_item *endpoint_configs = new_endpoint_config_hash();
 
 	if(ini_parse(config_file, parse_endpoint_configuration, (void*)&endpoint_configs) < 0) {
@@ -43,23 +44,35 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 
-	char *endpoint_name = get_endpoint(SERVER(req, "REQUEST_URI"), endpoint_configs);
+	endpoint_config *endpoint_config = get_endpoint_config(SERVER(req, "REQUEST_URI"), SERVER(req, "QUERY_STRING"), endpoint_configs);
 
+	char *endpoint_name = NULL;
 
-    if(*endpoint_name == '/') {
-        free(endpoint_name);
-        endpoint_name = strdup("site_index");
-    }
+ 	if(endpoint_config)	
+		endpoint_name =	endpoint_config->function;
 
-    endpoint_function = dlsym(handle, endpoint_name);
-    char *error = dlerror();
+	if(endpoint_name) {
+		endpoint_function = dlsym(handle, endpoint_name);
+		char *error = dlerror();
 
-    if(error != NULL) {
-        generate_default_404_header();
-        fprintf(stdout, "\n%s function not found in the provided in library %s. Error from dlsym %s\n", endpoint_name,
-                ENDPOINT_LIB_PATH, error);
-        return 0;
-    }
+		if(error != NULL) {
+			generate_default_404_header();
+			fprintf(stdout, "\n%s function not found in the provided in library %s. Error from dlsym %s\n", endpoint_name,
+					ENDPOINT_LIB_PATH, error);
+			return 0;
+		}
+	}
+	else {
+		generate_default_404_header();
+		fprintf(stdout, "\nNo configured endpoint for the provided URL %s<br/> Check your endpoints config file (%s)", SERVER(req, "REQUEST_URI"), ENDPOINTS_FILE);
+		return 0;
+	}
+
+	//TODO: include an error message on the endpoint_config
+	//TODO: if error do not call the endpoint function!!
+	if(endpoint_config->params && !endpoint_config->error_parsing) {
+		add_params_to_request(req, endpoint_config->params);
+	}
 
     endpoint_function(req, NULL);
 
