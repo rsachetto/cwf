@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 		generate_default_404_header();
 
 		if(debug_server)		
-			fprintf(stdout, "<h1> Error parsing parameters for endpoint [%s] with URL %s</h1><h2>Errors:</h2> <h2 style=\"color:red;\">%s</h2> ", endpoint_name, SERVER(req, "REQUEST_URI"), endpoint_config->error);
+			fprintf(stdout, "<h1>Error parsing parameters for endpoint [%s] with URL %s</h1><h2 style=\"color:red;\">%s</h2> ", endpoint_name, SERVER(req, "REQUEST_URI"), endpoint_config->error);
 		return 0;
 
 		}
