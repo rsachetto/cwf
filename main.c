@@ -5,13 +5,11 @@
 #include <unistd.h>
 
 #include "src/cwf.h"
-#include "src/endpoints.h"
 #include "src/ini_parse.h"
 
 //TODO: create a ini file to configure the site options like the debug_seter and the endpoints file
 #define ENDPOINTS_FILE "/var/www/cwf/endpoints.ini"
 
-bool debug_server = true;
 
 #ifdef GDB_DEBUG
 void wait_for_gdb_to_attach() {

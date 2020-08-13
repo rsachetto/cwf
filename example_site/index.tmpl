@@ -20,6 +20,14 @@
 </head> 
 
 <body>
+
+	<TMPL_LOOP name="loop">
+	<tr>
+	<th align="left"><TMPL_VAR name="Id"></th>
+	<td><TMPL_VAR name="Name"></td>
+	<td><TMPL_VAR name="Price"></td>
+	</tr>
+	</TMPL_LOOP>
     
     <header class="header text-center">	    
 	    <h1 class="blog-name pt-lg-4 mb-0"><a href="index.html">Anthony's Blog</a></h1>

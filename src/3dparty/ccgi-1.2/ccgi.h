@@ -40,9 +40,9 @@ CGI_varlist *CGI_get_cookie(CGI_varlist *v);
 
 CGI_varlist *CGI_get_query(CGI_varlist *v);
 
-CGI_varlist *CGI_get_post(CGI_varlist *v, const char *template);
+CGI_varlist *CGI_get_post(CGI_varlist *v, const char *template_name);
 
-CGI_varlist *CGI_get_all(const char *template);
+CGI_varlist *CGI_get_all(const char *template_name);
 
 CGI_varlist *CGI_add_var(CGI_varlist *v, const char *varname,
     const char *value);

@@ -1,10 +1,7 @@
 #include <ctype.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-
-#include "3dparty/ctemplate-1.0/ctemplate.h"
 
 #define STB_DS_IMPLEMENTATION
 #include "3dparty/stb/stb_ds.h"
@@ -115,21 +112,6 @@ static void get_post(request_item **v, int len) {
     free(buf);
 }
 
-request *new_empty_request() {
-    request *req = (request *)malloc(sizeof(request));
-    req->method = NULL;
-    req->urlencoded_data = NULL;
-    req->data_type = NULL;
-    sh_new_arena(req->urlencoded_data);
-
-    return req;
-}
-
-void generate_default_404_header() {
-    fprintf(stdout, "Status: 404 Not Found\r\n");
-    fprintf(stdout, "Content-type: text/html\r\n\r\n");
-}
-
 static bool is_int(char *int_char) {
 	int len = strlen(int_char);
 
@@ -173,6 +155,33 @@ static void concat_error_msg(char_array *current_error, char *error_to_add) {
 	for(int i = 0; i < strlen(error_to_add); ++i) {
 		arrpush(*current_error, error_to_add[i]);
 	}
+}
+
+endpoint_config *new_endpoint_config() {
+	endpoint_config *config = calloc(1, sizeof(endpoint_config));
+	return config;
+}
+
+endpoint_config_item *new_endpoint_config_hash() {
+	endpoint_config_item *endpoint_config_hash = calloc(1, sizeof(endpoint_config_item));
+	sh_new_arena(endpoint_config_hash);
+	shdefault(endpoint_config_hash, NULL);
+	return endpoint_config_hash;
+}
+
+request *new_empty_request() {
+    request *req = (request *)malloc(sizeof(request));
+    req->method = NULL;
+    req->urlencoded_data = NULL;
+    req->data_type = NULL;
+    sh_new_arena(req->urlencoded_data);
+
+    return req;
+}
+
+void generate_default_404_header() {
+    fprintf(stdout, "Status: 404 Not Found\r\n");
+    fprintf(stdout, "Content-type: text/html\r\n\r\n");
 }
 
 endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
@@ -395,20 +404,12 @@ char *GET(request *req, char *key) {
     return NULL;
 }
 
-int render_template(request *req, const char *template_path) {
+int render_template(TMPL_varlist *varlist, const char *template_path) {
     fputs("Content-type: text/html\r\n\r\n", stdout);
 
     int ret = 0;
 
-    TMPL_varlist *varlist = 0;
     TMPL_fmtlist *fmtlist;
-
-    const char *name;
-    CGI_value *value;
-
-    for(int i = 0; i < shlen(req->urlencoded_data); i++) {
-        varlist = TMPL_add_var(varlist, req->urlencoded_data[i].key, req->urlencoded_data[i].value, 0);
-    }
 
     fmtlist = TMPL_add_fmt(0, "entity", TMPL_encode_entity);
     TMPL_add_fmt(fmtlist, "url", TMPL_encode_url);
@@ -420,16 +421,95 @@ int render_template(request *req, const char *template_path) {
     return ret;
 }
 
-endpoint_config *new_endpoint_config() {
-	endpoint_config *config = calloc(1, sizeof(endpoint_config));
-	return config;
+cfw_database *open_database(const char *db_filename) {
+
+	cfw_database *database = calloc(1, sizeof(cfw_database));
+
+	int rc = sqlite3_open(db_filename, &(database->db));
+
+	if (rc != SQLITE_OK) {
+		database->error = strdup(sqlite3_errmsg(database->db));
+		sqlite3_close(database->db);
+	}
+
+	return database;
+
 }
 
-endpoint_config_item *new_endpoint_config_hash() {
-	endpoint_config_item *endpoint_config_hash = calloc(1, sizeof(endpoint_config_item));
-	sh_new_arena(endpoint_config_hash);
-	shdefault(endpoint_config_hash, NULL);
-	return endpoint_config_hash;
+static int sqlite_callback(void *cfw_db, int num_results, char **column_values, char **column_names) {
+
+	if(num_results) {	
+
+		cfw_database *database = (cfw_database *)cfw_db;
+
+		record *line;
+		sh_new_strdup(line);
+		shdefault(line, NULL);
+
+		int num_records = 0;
+
+		for (int i = 0; i < num_results; i++) {
+			if(column_names[i]) {
+				shput(line, strdup(column_names[i]), strdup(column_values[i]));
+				num_records++;
+			}
+		}
+
+		arrput(database->records, line);
+		database->num_records += 1;
+	}
+
+	return 0;
+
 }
 
+void execute_query(const char *query, cfw_database *database) {
+
+	char *errmsg;
+
+	//TODO: We will have to free all records
+	if(database->records) { 
+		arrfree(database->records);
+		database->records = NULL;
+		database->num_records = 0;
+	}
+
+	int rc = sqlite3_exec(database->db, query, sqlite_callback, (void *)database, &errmsg);
+
+	if (rc != SQLITE_OK ) {
+		database->error = strdup(errmsg);
+		sqlite3_close(database->db);
+		sqlite3_free(errmsg);            	
+	}
+}
+
+int get_num_columns(record *r) {
+	return shlen(r);
+}
+
+TMPL_varlist *request_to_varlist(request *req, TMPL_varlist *varlist) {
+	for(int i = 0; i < shlen(req->urlencoded_data); i++) {
+		varlist = TMPL_add_var(varlist, req->urlencoded_data[i].key, req->urlencoded_data[i].value, 0);
+	}
+
+	return varlist;
+}
+
+TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name) {
+ 
+	TMPL_loop  *loop = 0;
+
+	for(int i = 0; i < database->num_records; i++) {
+    	TMPL_varlist *loop_varlist = 0;
+		for(int j = 0; j < get_num_columns(database->records[i]); j++) {
+			loop_varlist = TMPL_add_var(loop_varlist, database->records[i][j].key, database->records[i][j].value, 0);
+		}
+
+    	loop = TMPL_add_varlist(loop, loop_varlist);
+	}
+
+    varlist = TMPL_add_loop(varlist, loop_name, loop);
+
+	return varlist;
+}
 
