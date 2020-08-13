@@ -8,7 +8,8 @@
 #include "src/endpoints.h"
 #include "src/ini_parse.h"
 
-#define ENDPOINTS_FILE "/home/sachetto/cwf/endpoints.ini"
+//TODO: create a ini file to configure the site options like the debug_seter and the endpoints file
+#define ENDPOINTS_FILE "/var/www/cwf/endpoints.ini"
 
 bool debug_server = true;
 
@@ -42,8 +43,10 @@ int main(int argc, char **argv) {
 	endpoint_config_item *endpoint_configs = new_endpoint_config_hash();
 
 	if(ini_parse(config_file, parse_endpoint_configuration, (void*)&endpoint_configs) < 0) {
-		fprintf(stderr, "Error: Can't load the config file %s\n", config_file);
-		return EXIT_FAILURE;
+		generate_default_404_header();
+		if(debug_server)
+			fprintf(stdout, "Error: Can't load the config file %s\n", config_file);
+		return 0;
 	}
 
 	endpoint_config *endpoint_config = get_endpoint_config(SERVER(req, "REQUEST_URI"), SERVER(req, "QUERY_STRING"), endpoint_configs);

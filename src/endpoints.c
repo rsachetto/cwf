@@ -19,7 +19,7 @@ ENDPOINT(site_index) {
 
 ENDPOINT(info) {
 	
-	render_template(request, "/home/sachetto/cwf/template.tmpl");
+	render_template(request, "/var/www/cwf/template.tmpl");
 
 	return 1;
 }
