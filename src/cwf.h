@@ -3,6 +3,7 @@
 
 #include "3dparty/ccgi-1.2/ccgi.h"
 #include "3dparty/json/json.h"
+#include "3dparty/sqlite/sqlite3.h"
 #include <stdbool.h>
 
 #define IS_GET(req) strcmp(req->method, "GET") == 0
