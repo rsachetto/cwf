@@ -1548,3 +1548,13 @@ TMPL_encode_url(const char *value, FILE *out) {
         fputc(hexdigit[c & 0xf], out);
     }
 }
+
+TMPL_loop *
+TMPL_get_loop(TMPL_varlist *varlist) {
+	return varlist->loop;
+}
+
+TMPL_varlist *
+TMPL_get_loop_varlist(TMPL_loop *loop) {
+	return loop->varlist;
+}

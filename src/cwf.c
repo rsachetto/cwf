@@ -487,25 +487,40 @@ int get_num_columns(record *r) {
 	return shlen(r);
 }
 
-TMPL_varlist *request_to_varlist(request *req, TMPL_varlist *varlist) {
+TMPL_varlist *request_to_varlist(request *req, TMPL_varlist *varlist, modify_db_name_value_fn *modify) {
 	for(int i = 0; i < shlen(req->urlencoded_data); i++) {
-		varlist = TMPL_add_var(varlist, req->urlencoded_data[i].key, req->urlencoded_data[i].value, 0);
+		char *name = strdup(req->urlencoded_data[i].key);
+			char *value = strdup(req->urlencoded_data[i].value);
+
+			if(modify) {
+				modify(name, value);
+			}
+
+			varlist = TMPL_add_var(varlist, name, value, 0);
 	}
 
 	return varlist;
 }
 
-TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name) {
+TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name, modify_db_name_value_fn *modify) {
  
 	TMPL_loop  *loop = 0;
 
 	for(int i = 0; i < database->num_records; i++) {
-    	TMPL_varlist *loop_varlist = 0;
+		TMPL_varlist *loop_varlist = 0;
+
 		for(int j = 0; j < get_num_columns(database->records[i]); j++) {
-			loop_varlist = TMPL_add_var(loop_varlist, database->records[i][j].key, database->records[i][j].value, 0);
+			char *name = strdup(database->records[i][j].key);
+			char *value = strdup(database->records[i][j].value);
+
+			if(modify) {
+				modify(name, value);
+			}
+
+			loop_varlist = TMPL_add_var(loop_varlist, name, value, 0);
 		}
 
-    	loop = TMPL_add_varlist(loop, loop_varlist);
+		loop = TMPL_add_varlist(loop, loop_varlist);
 	}
 
     varlist = TMPL_add_loop(varlist, loop_name, loop);

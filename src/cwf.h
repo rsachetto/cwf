@@ -68,6 +68,8 @@ typedef struct cfw_database_t {
 #define ENDPOINT(name) int name(request *request, endpoint_config *config)
 typedef ENDPOINT(endpoint_fn);
 
+typedef void modify_db_name_value_fn(char *name, char *value);
+
 request *new_empty_request();
 request *new_from_env_vars();
 
@@ -75,8 +77,8 @@ char *SERVER(request *req, char *key);
 char *GET(request *req, char *key);
 
 int render_template(TMPL_varlist *varlist, const char *template_path);
-TMPL_varlist *request_to_varlist(request *req, TMPL_varlist *varlist);
-TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name);
+TMPL_varlist *request_to_varlist(request *req, TMPL_varlist *varlist, modify_db_name_value_fn *modify);
+TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name, modify_db_name_value_fn *f);
 
 endpoint_config *new_endpoint_config();
 endpoint_config_item *new_endpoint_config_hash();
