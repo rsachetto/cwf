@@ -487,7 +487,7 @@ int get_num_columns(record *r) {
 	return shlen(r);
 }
 
-TMPL_varlist *request_to_varlist(request *req, TMPL_varlist *varlist, modify_db_name_value_fn *modify) {
+TMPL_varlist *request_to_varlist(TMPL_varlist *varlist, request *req, modify_db_name_value_fn *modify) {
 	for(int i = 0; i < shlen(req->urlencoded_data); i++) {
 		char *name = strdup(req->urlencoded_data[i].key);
 			char *value = strdup(req->urlencoded_data[i].value);
@@ -497,6 +497,26 @@ TMPL_varlist *request_to_varlist(request *req, TMPL_varlist *varlist, modify_db_
 			}
 
 			varlist = TMPL_add_var(varlist, name, value, 0);
+	}
+
+	return varlist;
+}
+
+TMPL_varlist *db_record_to_varlist(TMPL_varlist *varlist, cfw_database *database, modify_db_name_value_fn *modify) {
+
+	for(int i = 0; i < database->num_records; i++) {
+
+		for(int j = 0; j < get_num_columns(database->records[i]); j++) {
+			char *name = strdup(database->records[i][j].key);
+			char *value = strdup(database->records[i][j].value);
+
+			if(modify) {
+				modify(name, value);
+			}
+
+			varlist = TMPL_add_var(varlist, name, value, 0);
+		}
+
 	}
 
 	return varlist;
@@ -528,3 +548,25 @@ TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, 
 	return varlist;
 }
 
+char_array strip_html_tags(const char *buf) {
+	
+	char_array result = NULL;	
+	bool opened = false;
+
+	int len = strlen(buf);
+
+	for(int i = 0; i < len; i++) {
+		if(buf[i] == '<') {
+			opened = true;
+		} else if (buf[i] == '>') {
+			opened = false;
+		} else if (!opened) {
+			arrput(result, buf[i]);
+		}
+	}
+
+	arrput(result, '\0');
+
+	return result;
+
+}

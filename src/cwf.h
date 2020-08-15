@@ -77,7 +77,8 @@ char *SERVER(request *req, char *key);
 char *GET(request *req, char *key);
 
 int render_template(TMPL_varlist *varlist, const char *template_path);
-TMPL_varlist *request_to_varlist(request *req, TMPL_varlist *varlist, modify_db_name_value_fn *modify);
+TMPL_varlist *request_to_varlist(TMPL_varlist *varlist, request *req,  modify_db_name_value_fn *modify);
+TMPL_varlist *db_record_to_varlist(TMPL_varlist *varlist, cfw_database *database, modify_db_name_value_fn *modify);
 TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name, modify_db_name_value_fn *f);
 
 endpoint_config *new_endpoint_config();
@@ -87,6 +88,8 @@ void add_params_to_request(request *req, url_params *params);
 cfw_database *open_database(const char *db_filename);
 void execute_query(const char *query, cfw_database *db);
 int get_num_columns(record *r);
+
+char_array strip_html_tags(const char *buf);
 
 void generate_default_404_header();
 #endif /* __CWF_H */

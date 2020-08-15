@@ -41,8 +41,7 @@ void TMPL_encode_entity(const char *value, FILE *out);
 
 void TMPL_encode_url   (const char *value, FILE *out);
 
-TMPL_loop * TMPL_get_loop(TMPL_varlist *varlist);
-
-TMPL_varlist * TMPL_get_loop_varlist(TMPL_loop *loop);
-
+TMPL_loop    *TMPL_get_loop(TMPL_varlist *varlist);
+TMPL_varlist *TMPL_get_loop_varlist(TMPL_loop *loop);
+TMPL_varlist *TMPL_get_next_varlist(TMPL_varlist *varlist);
 #endif

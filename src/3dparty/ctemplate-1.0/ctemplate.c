@@ -1558,3 +1558,8 @@ TMPL_varlist *
 TMPL_get_loop_varlist(TMPL_loop *loop) {
 	return loop->varlist;
 }
+
+TMPL_varlist *
+TMPL_get_next_varlist(TMPL_varlist *varlist) {
+	return varlist->next;
+}

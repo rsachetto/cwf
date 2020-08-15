@@ -58,7 +58,7 @@ ENDPOINT(site_index) {
         return 1;
     }
 
-    execute_query("select * from posts", database);
+    execute_query("SELECT * FROM posts ORDER BY id DESC; ", database);
 
     if(database->error) {
         generate_default_404_header();
@@ -72,7 +72,8 @@ ENDPOINT(site_index) {
 	
 	TMPL_varlist *varlist = 0;
     varlist = db_records_to_loop(varlist, database, "loop", modify_value);
-
+	
+	//TODO: add a function to do this
 	TMPL_varlist *loop_varlist = TMPL_get_loop_varlist(TMPL_get_loop(varlist));
 	
 	for(int i = 0; i < database->num_records; i++) {
@@ -80,33 +81,65 @@ ENDPOINT(site_index) {
 		for(int j = 0; j < get_num_columns(database->records[i]); j++) {
 			char *name = strdup(database->records[i][j].key);
 			char *value = database->records[i][j].value;
-		
+
 			if(strcmp(name, "content") == 0) {
-				char *less_content;
-				int len = strlen(value);
+				char *less_content = strip_html_tags(value);
+				int len = strlen(less_content);
 				int max = 570;
 				if(len > max) {
-					less_content = malloc(max + 4);
-					less_content = strncpy(less_content, value, max);
 					less_content[max] = '\0';
 					less_content[max-1] = '.';
 					less_content[max-2] = '.';
 					less_content[max-3] = '.';
-				}
-				else {
-					less_content = strdup(value);
 				}
 				loop_varlist = TMPL_add_var(loop_varlist, "content_main_page", less_content, 0);
 			}
 
 		}
 
+		loop_varlist = TMPL_get_next_varlist(loop_varlist);
 	}
-
 	render_template(varlist, "/var/www/cwf/index.tmpl");
     return 1;
 }
 
 ENDPOINT(post_detail) {
-	render_template(NULL, "/var/www/cwf/blog-post.tmpl");
+
+	cfw_database *database = open_database("/var/www/cwf/blog.sqlite");
+
+	if(database->error) {
+		generate_default_404_header();
+
+		if(debug_server) {
+			fprintf(stdout, "Database error: %s", database->error);
+		}
+
+		return 1;
+	}
+
+	//TODO: prepared statement here
+	char query[1024];
+
+	int id = strtol(GET(request, "id"), NULL, 10);
+
+	sprintf(query, "SELECT content FROM posts WHERE id=%d", id); 
+
+	execute_query(query, database);
+
+	if(database->error) {
+		generate_default_404_header();
+
+		if(debug_server) {
+			fprintf(stdout, "Database error: %s", database->error);
+		}
+
+		return 1;
+	}
+
+	TMPL_varlist *varlist = 0;
+	varlist = db_record_to_varlist(varlist, database, NULL);
+
+	render_template(varlist, "/var/www/cwf/blog-post.tmpl");
+
+	return 1;
 }

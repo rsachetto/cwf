@@ -85,8 +85,8 @@
 				    <div class="media">
 					    <img class="mr-3 img-fluid post-thumb d-none d-md-flex" src="static/assets/images/blog/blog-post-thumb-1.jpg" alt="image">
 					    <div class="media-body">
-						    <h3 class="title mb-1"><a href="blog-post.html"><TMPL_VAR name="title"></a></h3>
-						    <div class="meta mb-1"><span class="date">Published <TMPL_VAR name="date"> <TMPL_IF name="date" value="1"> day ago <TMPL_ELSE> days ago</TMPL_IF> </span><span class="time"><TMPL_VAR name="read_time"> min read</span><span class="comment"><a href="#">8 comments</a></span></div> <div class="intro"> <TMPL_VAR name="content_main_page"> </div>
+						    <h3 class="title mb-1"><a href="post_detail/<TMPL_VAR name="id">"><TMPL_VAR name="title"></a></h3>
+						    <div class="meta mb-1"><span class="date">Published <TMPL_VAR name="date"> <TMPL_IF name="date" value="1"> day ago <TMPL_ELSE> days ago</TMPL_IF> </span><span class="time"><TMPL_VAR name="read_time"> min read</span></div> <div class="intro"> <TMPL_VAR name="content_main_page"> </div>
 						    <a class="more-link" href="blog-post.html">Read more &rarr;</a>
 					    </div><!--//media-body-->
 				    </div><!--//media-->
