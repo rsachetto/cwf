@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <time.h>
+
+#include <openssl/sha.h>
 
 #define STB_DS_IMPLEMENTATION
 #include "3dparty/stb/stb_ds.h"
@@ -9,7 +12,56 @@
 
 #define ENDSWITH(s, c) (s)[strlen((s)) - 1] == (c)
 
+
 /*These are from ccgi*/
+
+static char *scanspaces(char *p) {
+	while (*p == ' ' || *p == '\t') {
+		p++;
+	}
+	return p;
+}
+
+static char *scanattr(char *p, char *attr[2]) {
+	int quote = 0;
+
+	attr[0] = p = scanspaces(p);
+	while (*p != '=' && *p != 0) {
+		p++;
+	}
+	if (*p != '=' || p == attr[0]) {
+		return 0;
+	}
+	*p++ = 0;
+	if (*p == '"' || *p == '\'' || *p == '`') {
+		quote = *p++;
+	}
+	attr[1] = p;
+	if (quote != 0) {
+		while(*p != quote && *p != 0) {
+			p++;
+		}
+		if (*p != quote) {
+			return 0;
+		}
+		*p++ = 0;
+		if (*p == ';') {
+			p++;
+		}
+	}
+	else {
+		while (*p != ';' && *p != ' ' && *p != '\t' &&
+			*p != '\r' && *p != '\n' && *p != 0)
+		{
+			p++;
+		}
+		if (*p != 0) {
+			*p++ = 0;
+		}
+	}
+	return p;
+}
+
 static int hex(int digit) {
     switch(digit) {
         case '0':
@@ -157,6 +209,169 @@ static void concat_error_msg(char_array *current_error, char *error_to_add) {
 	}
 }
 
+cookie *new_cookie(char *name, char *value) {
+	cookie *v = calloc(1, sizeof(cookie));
+	v->name = strdup(name);
+	v->value = strdup(value);
+	return v;
+}
+
+cookie *get_cookie() {
+	
+	const char *env;
+	char *buf, *p, *cookie_data[2];
+
+	cookie *v = calloc(1, sizeof(cookie));
+
+	if ((env = getenv("HTTP_COOKIE")) == 0) {
+		free(v);
+		return NULL;
+	}
+	buf = (char *) malloc(strlen(env) + 1);
+	p = strcpy(buf, env);
+	while ((p = scanattr(p, cookie_data)) != 0) {
+		if(v->name == NULL) {
+			v->name  = strdup(cookie_data[0]);
+			v->value = strdup(cookie_data[1]);  
+		}
+		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Expires", 7)) {
+			v->expires = strtol(cookie_data[1], NULL, 10);
+		}
+		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Max-Age", 7)) {
+			v->max_age = strtol(cookie_data[1], NULL, 10);
+		}
+		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Domain", 6)) {
+			v->domain = strdup(cookie_data[1]);
+
+		}
+		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Path", 4)) {
+			v->path = strdup(cookie_data[1]);
+		}
+		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Secure", 6)) {
+			v->secure = true;
+		}
+		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "HttpOnly", 8)) {
+			v->http_only = true;
+		}
+		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "SameSite", 8)) {
+			if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Strict", 6))  {
+				v->same_site = strdup("Strict");
+			}
+			else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Lax", 3)) {
+				v->same_site = strdup("Lax");
+			}
+		}
+
+	}
+	free(buf);
+	return v;
+}
+
+void write_http_headers(http_header header) {
+	int h_len = shlen(header);
+	for(int i = 0; i < h_len; i++) {
+		if (i == h_len - 1) {
+			fprintf(stdout, "%s: %s\r\n\r\n", header[i].key, header[i].value);
+		}
+		else {
+			fprintf(stdout, "%s: %s\r\n", header[i].key, header[i].value);
+		}
+	}
+}
+
+http_header new_empty_header() {
+	http_header header = NULL;
+	sh_new_arena(header);
+	shdefault(header, NULL);
+	return header;
+}
+
+void add_custom_header(const char *name, const char *value, http_header *header) {
+	shput(*header, name, strdup(value));
+}
+
+static inline void append_string(char_array *string, const char *to_append) {
+
+	int len = strlen(to_append);
+
+	for(int i = 0; i < len; i++) {
+		arrput(*string, to_append[i]);
+	}	
+}
+
+//TODO: this can be much faster if we do memcpy instead of fors
+void add_cookie_to_header(cookie *c, http_header *header) {
+
+	if(!c || !c->name || !c->value) return;
+
+	int cookie_str_size = strlen(c->name);
+	cookie_str_size += strlen(c->value);
+	cookie_str_size += 2; // = and ;
+
+	char_array cookie_str = NULL;
+	arrsetcap(cookie_str, cookie_str_size);
+
+	append_string(&cookie_str, c->name);
+	arrput(cookie_str, '=');
+	append_string(&cookie_str, c->value);
+	arrput(cookie_str, ';');
+
+	if(c->expires > 0) {
+		char buf[40];
+		time_t cookie_date = c->expires + time(NULL);
+		struct tm tm = *gmtime(&cookie_date);
+		strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+		append_string(&cookie_str, "Expires=");
+		append_string(&cookie_str, buf);
+		arrput(cookie_str, ';');
+	}
+
+	if(c->max_age > 0) {
+		char buf[40];
+		sprintf(buf, "%d", c->max_age);
+		append_string(&cookie_str, "Max-Age=");
+		append_string(&cookie_str, buf);
+		arrput(cookie_str, ';');
+
+	}
+
+	if(c->domain) {
+		append_string(&cookie_str, "Domain=");
+		append_string(&cookie_str, c->domain);
+		arrput(cookie_str, ';');
+
+	}
+
+	if(c->path) {
+		append_string(&cookie_str, "Path=");
+		append_string(&cookie_str, c->path);
+		arrput(cookie_str, ';');
+
+	}
+
+	if(c->same_site) {
+		append_string(&cookie_str, "SameSite");
+		arrput(cookie_str, ';');
+
+	}
+
+	if(c->secure) {
+		append_string(&cookie_str, "Secure");
+		arrput(cookie_str, ';');
+
+	}
+
+	if(c->http_only) {
+		append_string(&cookie_str, "HttpOnly");
+		arrput(cookie_str, ';');
+	}
+
+	arrput(cookie_str, '\0');
+
+	add_custom_header("Set-Cookie", cookie_str, header);
+
+
+}
 endpoint_config *new_endpoint_config() {
 	endpoint_config *config = calloc(1, sizeof(endpoint_config));
 	return config;
@@ -570,3 +785,31 @@ char_array strip_html_tags(const char *buf) {
 	return result;
 
 }
+
+static bool simpleSHA256(void* input, unsigned long length, unsigned char* md) {
+    SHA256_CTX context;
+    if(!SHA256_Init(&context))
+        return false;
+
+    if(!SHA256_Update(&context, (unsigned char*)input, length))
+        return false;
+
+    if(!SHA256_Final(md, &context))
+        return false;
+
+    return true;
+}
+
+char *generate_b64_session_id() {
+	char buf[40];
+	sprintf(buf, "%ld", time(NULL));
+
+	unsigned char sha[32];
+	simpleSHA256(buf, strlen(buf), sha);
+
+	char *b64 = CGI_encode_base64(sha, 32);
+
+	return(b64);
+}
+
+

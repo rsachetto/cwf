@@ -6,6 +6,44 @@
 #include "3dparty/ctemplate-1.0/ctemplate.h"
 #include <time.h> 
 
+ENDPOINT(test_cookie) {
+
+	http_header headers = new_empty_header();
+
+	//TODO: make helper functions for this	
+	add_custom_header("Content-Type", "text/html", &headers);
+
+	cookie *c = get_cookie();
+	bool cookie = true;
+
+	if(!c) {
+
+		//TODO: create a function to start a section
+		char *sid = generate_b64_session_id();
+		c = new_cookie("sid", sid);
+		free(sid);
+
+
+		c->expires = 12 * 30 * 24 * 60 * 60;
+		c->domain = "cwf_test";
+		c->path = "/test_cookie";
+		add_cookie_to_header(c, &headers);
+		cookie = false;
+	}
+
+	write_http_headers(headers);
+
+	if(cookie) {
+		fprintf(stdout, "COOKIES!!!!!");
+	}
+	else {
+		fprintf(stdout, "NO COOKIES!!!!!");
+	}
+
+	return 1;
+
+}
+
 
 ENDPOINT(cgi_info) {
     fprintf(stdout, "Content-type: text/plain\r\n\r\n");
