@@ -6,6 +6,52 @@
 #include "3dparty/ctemplate-1.0/ctemplate.h"
 #include <time.h> 
 
+
+//TODO: we neeed to figure out the headers situation
+ENDPOINT(login) {
+
+	TMPL_varlist *varlist = 0;
+	varlist = request_to_varlist(varlist, request, NULL);
+
+	if(IS_GET(request)) {
+		render_template(varlist, "/var/www/cwf/login.tmpl");
+	}
+	else if(IS_POST(request)) {
+	
+		http_header headers = NULL;	
+
+		session_start(&headers);
+
+		bool auth = (SESSION("auth") != NULL);
+
+		if(!auth) {
+
+			char *username = POST(request, "username");
+			char *password = POST(request, "password");
+
+			if(username && strcmp(username, "sachetto") == 0) {
+				if(password && strcmp(password, "abc") == 0) {
+					redirect("/admin_index");
+				}
+
+			}
+
+			else {
+				render_template(varlist, "/var/www/cwf/login.tmpl");
+			}
+		}
+	}
+
+	return 1;
+}
+
+ENDPOINT(admin_index) {
+	fprintf(stdout, "Content-Type: text/html\r\n\r\n");
+	fprintf(stdout, "LOGGED IN");
+
+	return 1;
+}
+
 ENDPOINT(test_cookie) {
 
 	http_header headers = new_empty_header();

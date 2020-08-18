@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <time.h>
+#include <stdio.h>
 
 #include <openssl/sha.h>
 
@@ -619,8 +620,16 @@ char *GET(request *req, char *key) {
     return NULL;
 }
 
+char *POST(request *req, char *key) {
+    if(IS_POST(req)) {
+		return shget(req->urlencoded_data, key);
+    }
+    return NULL;
+}
+
 int render_template(TMPL_varlist *varlist, const char *template_path) {
-    fputs("Content-type: text/html\r\n\r\n", stdout);
+    
+	fputs("Content-type: text/html\r\n\r\n", stdout);
 
     int ret = 0;
 
@@ -812,4 +821,104 @@ char *generate_b64_session_id() {
 	return(b64);
 }
 
+void redirect(const char *url) {
 
+	char *tmp = (char*) url;
+
+	if(strlen(url) > 1) {
+
+		if(url[0] == '/') {
+			tmp = tmp + 1;
+		}
+		fprintf(stdout, "Location:%s\r\n\r\n", tmp);
+	}
+	else if ( strlen(url) == 1 && *url == '/') {
+		fprintf(stdout, "Location:%s://%s/\r\n\r\n", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
+	}
+		
+}
+
+
+
+
+////////////////////SESSION/////////////////
+
+typedef struct session_t {
+	cookie *cookie;
+	record *data;
+} session;
+
+//TODO: this is only a silly test.. we should think in another way to store the session files. GDBM maybe?
+static void read_session_file(FILE *session_file) {
+
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char *key;
+	char *value;
+	int count = 0;
+
+	while ((nread = getline(&line, &len, session_file)) != -1) {
+		if(count % 2 == 0) {
+			key = strdup(line);
+		}
+		else {
+			shput(__SESSION__->data, key, strdup(line));
+			free(key);
+		}
+	}
+
+	free(line);
+}
+
+//https://alexwebdevelop.com/php-sessions-explained/
+//TODO: save the session values in main.c?
+//This function has to be called after adding and writing any headers
+//TODO: maybe the session can be inside the request?
+void session_start(http_header *headers) {        
+	//TODO: section needs to have a lock to access the session file. I thing we will need a semaphore here to handle simultaneos connections.
+	//If a section is readonly we dont need to bother with the lockfile
+	if (__SESSION__ == NULL) {
+	
+		__SESSION__ = calloc(1, sizeof(session));
+
+		__SESSION__->cookie = get_cookie();
+
+		if(!__SESSION__->cookie) {
+			char *sid = generate_b64_session_id();
+			__SESSION__->cookie = new_cookie("sid", sid);
+			sh_new_arena(__SESSION__->data);
+			shdefault(__SESSION__->data, NULL);
+
+			//TODO: let the user define a expire time and the other cookie settings
+			__SESSION__->cookie->expires = 12 * 30 * 24 * 60 * 60;
+			__SESSION__->cookie->domain = getenv("SERVER_NAME");
+			add_cookie_to_header(__SESSION__->cookie, headers);
+
+			char session_file_name[46];
+			//TODO: use c11 to avoid insecure string functions
+			sprintf(session_file_name, "/tmp/section_%s", sid);
+			
+			//We only need to create a new file for the session
+			FILE *session_file = fopen(session_file_name, "w");		
+			fclose(session_file);
+			free(sid);
+		}
+		else {
+			char session_file_name[41];
+		
+			//TODO: use c11 to avoid insecure string functions
+			//TODO: let the user change the session path
+			sprintf(session_file_name, "/tmp/section_%s", __SESSION__->cookie->value);
+			
+			//We only need to create a new file for the session
+			FILE *session_file = fopen(session_file_name, "r");		
+			read_session_file(session_file);
+			fclose(session_file);
+		}
+	}
+}
+
+char *SESSION(const char *key) {
+	return shget(__SESSION__->data, key);
+}

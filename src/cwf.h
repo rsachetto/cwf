@@ -16,6 +16,10 @@
 
 static bool debug_server = true;
 
+
+struct session_t;
+static struct session_t *__SESSION__ = NULL;
+
 typedef enum { INT, STRING, FLOAT, INVALID } parameter_type;
 
 typedef char *char_array;
@@ -95,6 +99,8 @@ void write_http_headers(http_header header);
 
 char *SERVER(request *req, char *key);
 char *GET(request *req, char *key);
+char *POST(request *req, char *key);
+char *SESSION(const char *key);
 
 int render_template(TMPL_varlist *varlist, const char *template_path);
 TMPL_varlist *request_to_varlist(TMPL_varlist *varlist, request *req,  modify_db_name_value_fn *modify);
@@ -118,4 +124,8 @@ char_array strip_html_tags(const char *buf);
 char *generate_b64_session_id(); 
 
 void generate_default_404_header();
+void redirect(const char *url);
+
+void session_start(http_header *headers);
+
 #endif /* __CWF_H */

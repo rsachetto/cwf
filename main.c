@@ -89,6 +89,8 @@ int main(int argc, char **argv) {
 	}
 
     endpoint_function(req, NULL);
+	//TODO: call functions to save the session after the endpoint ends...
+	//TODO: maybe we will also need to release the file locks if the section is not readonly
 
     return 0;
 }
