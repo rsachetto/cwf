@@ -8,10 +8,12 @@
 #ifndef _CTEMPLATE_H
 #define _CTEMPLATE_H
 
+#include "../sds/sds.h"
+
 typedef struct TMPL_varlist TMPL_varlist;
 typedef struct TMPL_loop  TMPL_loop;
 typedef struct TMPL_fmtlist TMPL_fmtlist;
-typedef void (*TMPL_fmtfunc) (const char *, FILE *);
+typedef void (*TMPL_fmtfunc) (const char *, FILE *, sds *);
 
 /*
 
@@ -35,11 +37,11 @@ void TMPL_free_fmtlist(TMPL_fmtlist *fmtlist);
 
 int TMPL_write(const char *filename, const char *tmplstr,
     const TMPL_fmtlist *fmtlist, const TMPL_varlist *varlist,
-    FILE *out, FILE *errout);
+    sds *out_string, FILE *out, FILE *errout);
 
-void TMPL_encode_entity(const char *value, FILE *out);
+void TMPL_encode_entity(const char *value, FILE *out, sds *out_str);
 
-void TMPL_encode_url   (const char *value, FILE *out);
+void TMPL_encode_url   (const char *value, FILE *out, sds *out_str);
 
 TMPL_loop    *TMPL_get_loop(TMPL_varlist *varlist);
 TMPL_varlist *TMPL_get_loop_varlist(TMPL_loop *loop);

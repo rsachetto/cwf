@@ -10,7 +10,7 @@ CRYPT = crypt.o
 
 CFLAGS = -fPIC $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
 
-OBJS = cwf.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o sqlite3.o
+OBJS = cwf.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o sqlite3.o sds.o
 libcwf.a: $(OBJS) $(CRYPT)
 	ar r libcwf.a $(OBJS) $(CRYPT)
 	ranlib libcwf.a
@@ -41,6 +41,10 @@ ini.o: 3dparty/ini/ini.c 3dparty/ini/ini.h
 
 sqlite3.o: 3dparty/sqlite/sqlite3.c 3dparty/sqlite/sqlite3.h
 	gcc $(CFLAGS) -c 3dparty/sqlite/sqlite3.c
+
+sds.o: 3dparty/sds/sds.c 3dparty/sds/sds.h
+	gcc $(CFLAGS) -c 3dparty/sds/sds.c
+
 
 
 clean:

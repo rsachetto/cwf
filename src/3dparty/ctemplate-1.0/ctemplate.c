@@ -47,6 +47,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <stdarg.h>
+
 #include "ctemplate.h"
 
 /* To prevent infinite TMPL_INCLUDE cycles, we limit the depth */
@@ -136,6 +137,7 @@ struct template {
     const char *tmplstr;   /* contents of template file */
     FILE *out;             /* template output file pointer */
     FILE *errout;          /* error output file pointer */
+	sds *out_string;        /* this will be used to write_to string */
     tagnode *roottag;      /* root of parse tree */
     const TMPL_fmtlist
         *fmtlist;          /* list of format functions */
@@ -224,7 +226,7 @@ mymalloc(size_t size) {
 
 static template *
 newtemplate(const char *filename, const char *tmplstr,
-    const TMPL_fmtlist *fmtlist, FILE *out, FILE *errout)
+    const TMPL_fmtlist *fmtlist, sds *out_string, FILE *out, FILE *errout)
 {
     template *t;
     FILE *fp;
@@ -269,6 +271,7 @@ newtemplate(const char *filename, const char *tmplstr,
     t->scanptr = t->tmplstr;
     t->roottag = t->curtag = t->nexttag = 0;
     t->out = out;
+	t->out_string = out_string;
     t->errout = errout;
     t->linenum = 1;
     t->error = 0;
@@ -1071,7 +1074,7 @@ is_true(const tagnode *iftag, const TMPL_varlist *varlist) {
  */
 
 static void
-write_text(const char *p, int len, FILE *out) {
+write_text(const char *p, int len, sds *out_string, FILE *out) {
     int i, k;
 
     for (i = 0; i < len; i++) {
@@ -1095,8 +1098,14 @@ write_text(const char *p, int len, FILE *out) {
                     continue;
                 }
             }
-        }
-        fputc(p[i], out);
+		}
+		if(out)
+	        fputc(p[i], out);
+		if(out_string) {
+			char str[2] = "\0";
+			str[0] = p[i];
+			*out_string = sdscat(*out_string, str);
+		}
     }
 }
 
@@ -1149,7 +1158,7 @@ walk(template *t, tagnode *tag, const TMPL_varlist *varlist) {
     switch(tag->kind) {
 
     case tag_text:
-        write_text(tag->tag.text.start, tag->tag.text.len, t->out);
+        write_text(tag->tag.text.start, tag->tag.text.len, t->out_string, t->out);
         break;
 
     case tag_var:
@@ -1162,10 +1171,15 @@ walk(template *t, tagnode *tag, const TMPL_varlist *varlist) {
         /* Use the tag's format function or else just use fputs() */
 
         if (tag->tag.var.fmtfunc != 0) {
-            tag->tag.var.fmtfunc(value, t->out);
+            tag->tag.var.fmtfunc(value, t->out, t->out_string);
         }
         else {
-            fputs(value, t->out);
+			if(t->out) {
+	            fputs(value, t->out);
+			}
+			if(t->out_string) {
+				*(t->out_string) = sdscat(*(t->out_string), value);
+			}
         }
         break;
 
@@ -1230,8 +1244,7 @@ walk(template *t, tagnode *tag, const TMPL_varlist *varlist) {
 
         if ((t2 = tag->tag.include.tmpl) == 0) {
             newfile = newfilename(tag->tag.include.filename, t->filename);
-            t2 = newtemplate(newfile, 0, t->fmtlist,
-                t->out, t->errout);
+            t2 = newtemplate(newfile, 0, t->fmtlist, t->out_string, t->out, t->errout);
             if (t2 == 0) {
                 free((void *) newfile);
                 t->error = 1;
@@ -1459,12 +1472,12 @@ TMPL_free_fmtlist(TMPL_fmtlist *fmtlist) {
 int
 TMPL_write(const char *filename, const char *tmplstr,
     const TMPL_fmtlist *fmtlist, const TMPL_varlist *varlist,
-    FILE *out, FILE *errout)
+    sds *out_string, FILE *out, FILE *errout)
 {
     int ret;
     template *t;
 
-    if ((t = newtemplate(filename, tmplstr, fmtlist, out, errout)) == 0) {
+    if ((t = newtemplate(filename, tmplstr, fmtlist, out_string, out, errout)) == 0) {
         return -1;
     }
     t->roottag = parselist(t, 0);
@@ -1485,40 +1498,74 @@ TMPL_write(const char *filename, const char *tmplstr,
  */
 
 void
-TMPL_encode_entity(const char *value, FILE *out) {
+TMPL_encode_entity(const char *value, FILE *out, sds *out_str) {
+
     for (; *value != 0; value++) {
         switch(*value) {
 
         case '&':
-            fputs("&amp;", out);
+			if(out)
+	            fputs("&amp;", out);
+			if(out_str)
+				*out_str = sdscat(*out_str, "&amp;");
             break;
 
         case '<':
-            fputs("&lt;", out);
+			if(out)
+	            fputs("&lt;", out);
+			if(out_str)
+				*out_str = sdscat(*out_str, "&lt;");
             break;
 
         case '>':
-            fputs("&gt;", out);
+			if(out)
+	            fputs("&gt;", out);
+			if(out_str)
+				*out_str = sdscat(*out_str, "&gt;");
+
             break;
 
         case '"':
-            fputs("&quot;", out);
+			if(out)
+	            fputs("&quot;", out);
+			if(out_str)
+				*out_str = sdscat(*out_str, "&quot;");
+
             break;
 
         case '\'':
-            fputs("&#39;", out);
+			if(out)
+	            fputs("&#39;", out);
+			if(out_str)
+				*out_str = sdscat(*out_str, "&#39;");
+
             break;
 
         case '\n':
-            fputs("&#10;", out);
+			if(out)
+	            fputs("&#10;", out);
+			if(out_str)
+				*out_str = sdscat(*out_str, "&#10;");
+
             break;
 
         case '\r':
-            fputs("&#13;", out);
+			if(out)
+	            fputs("&#13;", out);
+			if(out_str)
+				*out_str = sdscat(*out_str, "&#13;");
+
             break;
 
         default:
-            fputc(*value, out);
+			if(out)
+	            fputc(*value, out);
+			if(out_str) {
+				char str[2] = "\0"; 
+				str[0] = *value;
+				*out_str = sdscat(*out_str, str);
+			}
+
             break;
         }
     }
@@ -1527,7 +1574,7 @@ TMPL_encode_entity(const char *value, FILE *out) {
 /* TMPL_encode_url() does URL encoding (%xx)  */
 
 void
-TMPL_encode_url(const char *value, FILE *out) {
+TMPL_encode_url(const char *value, FILE *out, sds *out_str) {
     static const char hexdigit[] = "0123456789ABCDEF";
     int c;
 
@@ -1535,17 +1582,37 @@ TMPL_encode_url(const char *value, FILE *out) {
         if (isalnum(*value) || *value == '.' ||
             *value == '-' || *value == '_')
         {
-            fputc(*value, out);
+			if(out) {
+	            fputc(*value, out);
+			}
+			if(out_str) {
+				char str[2] = "\0"; 
+				str[0] = *value;
+				*out_str = sdscat(*out_str, str);
+
+			}
             continue;
         }
         if (*value == ' ') {
-            fputc('+', out);
+			if(out)
+	            fputc('+', out);
+			if(out_str)
+				*out_str = sdscat(*out_str, "+");
             continue;
         }
         c = (unsigned char) *value;
-        fputc('%', out);
-        fputc(hexdigit[c >> 4],  out);
-        fputc(hexdigit[c & 0xf], out);
+		if(out) {
+	        fputc('%', out);
+    	    fputc(hexdigit[c >> 4],  out);
+        	fputc(hexdigit[c & 0xf], out);
+		}
+		if(out_str) {
+			char str[4] = "\0"; 
+			str[0] = '%';
+			str[1] = hexdigit[c >> 4];
+			str[2] = hexdigit[c & 0xf];
+			*out_str = sdscat(*out_str, str);
+		}
     }
 }
 

@@ -11,101 +11,82 @@
 ENDPOINT(login) {
 
 	TMPL_varlist *varlist = 0;
-	varlist = request_to_varlist(varlist, request, NULL);
+	varlist = request_to_varlist(varlist, NULL);
 
-	if(IS_GET(request)) {
-		render_template(varlist, "/var/www/cwf/login.tmpl");
-	}
-	else if(IS_POST(request)) {
-	
-		http_header headers = NULL;	
+	session_start();
 
-		session_start(&headers);
-
-		bool auth = (SESSION("auth") != NULL);
+	if(IS_GET()) {
+		bool auth = (SESSION_GET("auth") != NULL);
 
 		if(!auth) {
+			return render_template(varlist, "/var/www/cwf/login.tmpl");
+		}
+		else {
+			redirect("/admin_index");
+		}
+	}
+	else if(IS_POST()) {
 
-			char *username = POST(request, "username");
-			char *password = POST(request, "password");
+		char *username = POST("username");
+		char *password = POST("password");
 
-			if(username && strcmp(username, "sachetto") == 0) {
-				if(password && strcmp(password, "abc") == 0) {
-					redirect("/admin_index");
-				}
-
-			}
-
-			else {
-				render_template(varlist, "/var/www/cwf/login.tmpl");
-			}
+		if((username && strcmp(username, "sachetto") == 0) && (password && strcmp(password, "abc") == 0)) {
+			SESSION_PUT("auth", "true");
+			redirect("/admin_index");
+		}
+		else {
+			return render_template(varlist, "/var/www/cwf/login.tmpl");
 		}
 	}
 
-	return 1;
+	return NULL;
 }
 
 ENDPOINT(admin_index) {
-	fprintf(stdout, "Content-Type: text/html\r\n\r\n");
-	fprintf(stdout, "LOGGED IN");
 
-	return 1;
-}
+	session_start();
 
-ENDPOINT(test_cookie) {
+	bool auth = (SESSION_GET("auth") != NULL);
 
-	http_header headers = new_empty_header();
-
-	//TODO: make helper functions for this	
-	add_custom_header("Content-Type", "text/html", &headers);
-
-	cookie *c = get_cookie();
-	bool cookie = true;
-
-	if(!c) {
-
-		//TODO: create a function to start a section
-		char *sid = generate_b64_session_id();
-		c = new_cookie("sid", sid);
-		free(sid);
-
-
-		c->expires = 12 * 30 * 24 * 60 * 60;
-		c->domain = "cwf_test";
-		c->path = "/test_cookie";
-		add_cookie_to_header(c, &headers);
-		cookie = false;
-	}
-
-	write_http_headers(headers);
-
-	if(cookie) {
-		fprintf(stdout, "COOKIES!!!!!");
+	if(auth) {
+		header("Content-Type", "text/html");
+		sds response = sdsnew("<a href=\"/logout\">Logout</a>");
+		return response;
 	}
 	else {
-		fprintf(stdout, "NO COOKIES!!!!!");
+		redirect("/login");
 	}
-
-	return 1;
-
 }
 
+ENDPOINT(logout) {
+	session_start();
+	session_destroy();
+	redirect("/login");
+}
 
 ENDPOINT(cgi_info) {
-    fprintf(stdout, "Content-type: text/plain\r\n\r\n");
-    fprintf(stdout, "SQLITE VERSION: %s\r\n\r\n", sqlite3_libversion());
+
+
+	header("Content-Type", "text/plain");
+	sds response = sdsempty();
+
+	response = sdscatprintf(response, "SQLITE VERSION: %s\r\n\r\n", sqlite3_libversion());
+
+	cwf_request *request = cwf_vars->request;
+
+	
 
     for(int i = 0; i < request->server_data_len; i++) {
-        fprintf(stdout, "%s %s\n", request->server_data[i].key, request->server_data[i].value);
+		response = sdscatprintf(response, "%s %s\n", request->server_data[i].key, request->server_data[i].value);
     }
 
     if(strcmp(request->data_type, "urlencoded") == 0) {
         for(int i = 0; i < request->data_len; i++) {
-            fprintf(stdout, "%s %s\n", request->urlencoded_data[i].key, request->urlencoded_data[i].value);
+			response = sdscatprintf(response, "%s %s\n", request->urlencoded_data[i].key, request->urlencoded_data[i].value);
         }
     }
 
-	return 1;
+	return response;
 }
 
 void modify_value(char *name, char *value) {
@@ -130,16 +111,20 @@ void modify_value(char *name, char *value) {
 
 //TODO: remove html tags https://stackoverflow.com/questions/9444200/c-strip-html-between
 ENDPOINT(site_index) {
+
     cfw_database *database = open_database("/var/www/cwf/blog.sqlite");
 
-    if(database->error) {
-        generate_default_404_header();
+	sds response = sdsempty();
 
-        if(debug_server) {
-            fprintf(stdout, "Database error: %s", database->error);
+    if(database->error) {
+        
+		generate_default_404_header();
+
+        if(cwf_vars->print_debug_info) {
+            response = sdscatprintf(response, "Database error: %s", database->error);
         }
 
-        return 1;
+        return response;
     }
 
     execute_query("SELECT * FROM posts ORDER BY id DESC; ", database);
@@ -147,11 +132,11 @@ ENDPOINT(site_index) {
     if(database->error) {
         generate_default_404_header();
 
-        if(debug_server) {
-            fprintf(stdout, "Database error: %s", database->error);
+        if(cwf_vars->print_debug_info) {
+            response = sdscatprintf(response, "Database error: %s", database->error);
         }
 
-        return 1;
+        return response;
     }
 	
 	TMPL_varlist *varlist = 0;
@@ -183,28 +168,29 @@ ENDPOINT(site_index) {
 
 		loop_varlist = TMPL_get_next_varlist(loop_varlist);
 	}
-	render_template(varlist, "/var/www/cwf/index.tmpl");
-    return 1;
+
+	return render_template(varlist, "/var/www/cwf/index.tmpl");
 }
 
 ENDPOINT(post_detail) {
 
 	cfw_database *database = open_database("/var/www/cwf/blog.sqlite");
 
+	sds response = sdsempty();
+
 	if(database->error) {
 		generate_default_404_header();
 
-		if(debug_server) {
-			fprintf(stdout, "Database error: %s", database->error);
+		if(cwf_vars->print_debug_info) {
+			response = sdscatprintf(response, "Database error: %s", database->error);
 		}
-
-		return 1;
+		return response;
 	}
 
 	//TODO: prepared statement here
 	char query[1024];
 
-	int id = strtol(GET(request, "id"), NULL, 10);
+	int id = strtol(GET("id"), NULL, 10);
 
 	sprintf(query, "SELECT content FROM posts WHERE id=%d", id); 
 
@@ -213,17 +199,16 @@ ENDPOINT(post_detail) {
 	if(database->error) {
 		generate_default_404_header();
 
-		if(debug_server) {
-			fprintf(stdout, "Database error: %s", database->error);
+		if(cwf_vars->print_debug_info) {
+			response = sdscatprintf(response, "Database error: %s", database->error);
 		}
 
-		return 1;
+		return response;
 	}
 
 	TMPL_varlist *varlist = 0;
 	varlist = db_record_to_varlist(varlist, database, NULL);
 
-	render_template(varlist, "/var/www/cwf/blog-post.tmpl");
+	return render_template(varlist, "/var/www/cwf/blog-post.tmpl");
 
-	return 1;
 }

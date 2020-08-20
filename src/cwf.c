@@ -1,11 +1,10 @@
 #include <ctype.h>
+#include <openssl/sha.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <time.h>
-#include <stdio.h>
-
-#include <openssl/sha.h>
 
 #define STB_DS_IMPLEMENTATION
 #include "3dparty/stb/stb_ds.h"
@@ -13,54 +12,50 @@
 
 #define ENDSWITH(s, c) (s)[strlen((s)) - 1] == (c)
 
-
 /*These are from ccgi*/
 
 static char *scanspaces(char *p) {
-	while (*p == ' ' || *p == '\t') {
-		p++;
-	}
-	return p;
+    while(*p == ' ' || *p == '\t') {
+        p++;
+    }
+    return p;
 }
 
 static char *scanattr(char *p, char *attr[2]) {
-	int quote = 0;
+    int quote = 0;
 
-	attr[0] = p = scanspaces(p);
-	while (*p != '=' && *p != 0) {
-		p++;
-	}
-	if (*p != '=' || p == attr[0]) {
-		return 0;
-	}
-	*p++ = 0;
-	if (*p == '"' || *p == '\'' || *p == '`') {
-		quote = *p++;
-	}
-	attr[1] = p;
-	if (quote != 0) {
-		while(*p != quote && *p != 0) {
-			p++;
-		}
-		if (*p != quote) {
-			return 0;
-		}
-		*p++ = 0;
-		if (*p == ';') {
-			p++;
-		}
-	}
-	else {
-		while (*p != ';' && *p != ' ' && *p != '\t' &&
-			*p != '\r' && *p != '\n' && *p != 0)
-		{
-			p++;
-		}
-		if (*p != 0) {
-			*p++ = 0;
-		}
-	}
-	return p;
+    attr[0] = p = scanspaces(p);
+    while(*p != '=' && *p != 0) {
+        p++;
+    }
+    if(*p != '=' || p == attr[0]) {
+        return 0;
+    }
+    *p++ = 0;
+    if(*p == '"' || *p == '\'' || *p == '`') {
+        quote = *p++;
+    }
+    attr[1] = p;
+    if(quote != 0) {
+        while(*p != quote && *p != 0) {
+            p++;
+        }
+        if(*p != quote) {
+            return 0;
+        }
+        *p++ = 0;
+        if(*p == ';') {
+            p++;
+        }
+    } else {
+        while(*p != ';' && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' && *p != 0) {
+            p++;
+        }
+        if(*p != 0) {
+            *p++ = 0;
+        }
+    }
+    return p;
 }
 
 static int hex(int digit) {
@@ -166,227 +161,216 @@ static void get_post(request_item **v, int len) {
 }
 
 static bool is_int(char *int_char) {
-	int len = strlen(int_char);
+    int len = strlen(int_char);
 
-	if(len == 0) return false;
+    if(len == 0) return false;
 
-    for (int i = 0; i < len; ++i) {
-        if (!isdigit(int_char[i]))  {
+    for(int i = 0; i < len; ++i) {
+        if(!isdigit(int_char[i])) {
             return false;
         }
     }
 
-	return true;
+    return true;
 }
 
 static bool is_float(char *float_char) {
+    int len = strlen(float_char);
 
-	int len = strlen(float_char);
+    if(len == 0) return false;
 
-	if(len == 0) return false;
+    bool dot_found = false;
 
-	bool dot_found = false;
+    for(int i = 0; i < len; ++i) {
+        if(float_char[i] == '.') {
+            if(!dot_found)
+                dot_found = true;
+            else
+                return false;
 
-    for (int i = 0; i < len; ++i) {
+            continue;
+        }
 
-		if(float_char[i] == '.') {
-			if(!dot_found) dot_found = true;
-			else return false;
-
-			continue;
-		}
-
-        if (!isdigit(float_char[i]))  {
+        if(!isdigit(float_char[i])) {
             return false;
         }
     }
 
-	return true;
+    return true;
 }
 
 static void concat_error_msg(char_array *current_error, char *error_to_add) {
-	for(int i = 0; i < strlen(error_to_add); ++i) {
-		arrpush(*current_error, error_to_add[i]);
-	}
+    for(int i = 0; i < strlen(error_to_add); ++i) {
+        arrpush(*current_error, error_to_add[i]);
+    }
 }
 
-cookie *new_cookie(char *name, char *value) {
-	cookie *v = calloc(1, sizeof(cookie));
-	v->name = strdup(name);
-	v->value = strdup(value);
-	return v;
+cwf_cookie *new_cookie(char *name, char *value) {
+    cwf_cookie *v = calloc(1, sizeof(cwf_cookie));
+    v->name = strdup(name);
+    v->value = strdup(value);
+    return v;
 }
 
-cookie *get_cookie() {
-	
-	const char *env;
-	char *buf, *p, *cookie_data[2];
+void free_cookie(cwf_cookie *cookie) {
+	if(!cookie) return;
+	free(cookie->name);
+	free(cookie->value);
+	free(cookie->path);
+	free(cookie->domain);
+	free(cookie->same_site);
+}
 
-	cookie *v = calloc(1, sizeof(cookie));
+cwf_cookie *get_cookie() {
+    const char *env;
+    char *buf, *p, *cookie_data[2];
 
-	if ((env = getenv("HTTP_COOKIE")) == 0) {
-		free(v);
-		return NULL;
-	}
-	buf = (char *) malloc(strlen(env) + 1);
-	p = strcpy(buf, env);
-	while ((p = scanattr(p, cookie_data)) != 0) {
-		if(v->name == NULL) {
-			v->name  = strdup(cookie_data[0]);
-			v->value = strdup(cookie_data[1]);  
-		}
-		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Expires", 7)) {
-			v->expires = strtol(cookie_data[1], NULL, 10);
-		}
-		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Max-Age", 7)) {
-			v->max_age = strtol(cookie_data[1], NULL, 10);
-		}
-		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Domain", 6)) {
-			v->domain = strdup(cookie_data[1]);
+    cwf_cookie *v = calloc(1, sizeof(cwf_cookie));
 
-		}
-		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Path", 4)) {
-			v->path = strdup(cookie_data[1]);
-		}
-		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Secure", 6)) {
-			v->secure = true;
-		}
-		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "HttpOnly", 8)) {
-			v->http_only = true;
-		}
-		else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "SameSite", 8)) {
-			if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Strict", 6))  {
-				v->same_site = strdup("Strict");
-			}
-			else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Lax", 3)) {
-				v->same_site = strdup("Lax");
-			}
-		}
+    if((env = getenv("HTTP_COOKIE")) == 0) {
+        free(v);
+        return NULL;
+    }
+    buf = (char *)malloc(strlen(env) + 1);
+    p = strcpy(buf, env);
+    while((p = scanattr(p, cookie_data)) != 0) {
+        if(v->name == NULL) {
+            v->name = strdup(cookie_data[0]);
+            v->value = strdup(cookie_data[1]);
+        } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Expires", 7)) {
+            v->expires = strtol(cookie_data[1], NULL, 10);
+        } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Max-Age", 7)) {
+            v->max_age = strtol(cookie_data[1], NULL, 10);
+        } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Domain", 6)) {
+            v->domain = strdup(cookie_data[1]);
 
-	}
-	free(buf);
-	return v;
+        } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Path", 4)) {
+            v->path = strdup(cookie_data[1]);
+        } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Secure", 6)) {
+            v->secure = true;
+        } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "HttpOnly", 8)) {
+            v->http_only = true;
+        } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "SameSite", 8)) {
+            if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Strict", 6)) {
+                v->same_site = strdup("Strict");
+            } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Lax", 3)) {
+                v->same_site = strdup("Lax");
+            }
+        }
+    }
+    free(buf);
+    return v;
 }
 
 void write_http_headers(http_header header) {
-	int h_len = shlen(header);
-	for(int i = 0; i < h_len; i++) {
-		if (i == h_len - 1) {
-			fprintf(stdout, "%s: %s\r\n\r\n", header[i].key, header[i].value);
-		}
-		else {
-			fprintf(stdout, "%s: %s\r\n", header[i].key, header[i].value);
-		}
-	}
+    int h_len = shlen(header);
+    for(int i = 0; i < h_len; i++) {
+        if(i == h_len - 1) {
+            fprintf(stdout, "%s: %s\r\n\r\n", header[i].key, header[i].value);
+        } else {
+            fprintf(stdout, "%s: %s\r\n", header[i].key, header[i].value);
+        }
+    }
 }
 
 http_header new_empty_header() {
-	http_header header = NULL;
-	sh_new_arena(header);
-	shdefault(header, NULL);
-	return header;
+    http_header header = NULL;
+    sh_new_arena(header);
+    shdefault(header, NULL);
+    return header;
 }
 
 void add_custom_header(const char *name, const char *value, http_header *header) {
-	shput(*header, name, strdup(value));
+    shput(*header, name, strdup(value));
 }
 
 static inline void append_string(char_array *string, const char *to_append) {
+    int len = strlen(to_append);
 
-	int len = strlen(to_append);
-
-	for(int i = 0; i < len; i++) {
-		arrput(*string, to_append[i]);
-	}	
+    for(int i = 0; i < len; i++) {
+        arrput(*string, to_append[i]);
+    }
 }
 
-//TODO: this can be much faster if we do memcpy instead of fors
-void add_cookie_to_header(cookie *c, http_header *header) {
+// TODO: this can be much faster if we do memcpy instead of fors
+void add_cookie_to_header(cwf_cookie *c, http_header *header) {
+    if(!c || !c->name || !c->value) return;
 
-	if(!c || !c->name || !c->value) return;
+    int cookie_str_size = strlen(c->name);
+    cookie_str_size += strlen(c->value);
+    cookie_str_size += 2;  // = and ;
 
-	int cookie_str_size = strlen(c->name);
-	cookie_str_size += strlen(c->value);
-	cookie_str_size += 2; // = and ;
+    char_array cookie_str = NULL;
+    arrsetcap(cookie_str, cookie_str_size);
 
-	char_array cookie_str = NULL;
-	arrsetcap(cookie_str, cookie_str_size);
+    append_string(&cookie_str, c->name);
+    arrput(cookie_str, '=');
+    append_string(&cookie_str, c->value);
+    arrput(cookie_str, ';');
 
-	append_string(&cookie_str, c->name);
-	arrput(cookie_str, '=');
-	append_string(&cookie_str, c->value);
-	arrput(cookie_str, ';');
+    //if(c->expires > 0) {
+        char buf[40];
+        time_t cookie_date = c->expires + time(NULL);
+        struct tm tm = *gmtime(&cookie_date);
+        strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+        append_string(&cookie_str, "Expires=");
+        append_string(&cookie_str, buf);
+        arrput(cookie_str, ';');
+    //}
 
-	if(c->expires > 0) {
-		char buf[40];
-		time_t cookie_date = c->expires + time(NULL);
-		struct tm tm = *gmtime(&cookie_date);
-		strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
-		append_string(&cookie_str, "Expires=");
-		append_string(&cookie_str, buf);
-		arrput(cookie_str, ';');
-	}
+    if(c->max_age > 0) {
+        char buf[40];
+        sprintf(buf, "%d", c->max_age);
+        append_string(&cookie_str, "Max-Age=");
+        append_string(&cookie_str, buf);
+        arrput(cookie_str, ';');
+    }
 
-	if(c->max_age > 0) {
-		char buf[40];
-		sprintf(buf, "%d", c->max_age);
-		append_string(&cookie_str, "Max-Age=");
-		append_string(&cookie_str, buf);
-		arrput(cookie_str, ';');
+    if(c->domain) {
+        append_string(&cookie_str, "Domain=");
+        append_string(&cookie_str, c->domain);
+        arrput(cookie_str, ';');
+    }
 
-	}
+    if(c->path) {
+        append_string(&cookie_str, "Path=");
+        append_string(&cookie_str, c->path);
+        arrput(cookie_str, ';');
+    }
 
-	if(c->domain) {
-		append_string(&cookie_str, "Domain=");
-		append_string(&cookie_str, c->domain);
-		arrput(cookie_str, ';');
+    if(c->same_site) {
+        append_string(&cookie_str, "SameSite");
+        arrput(cookie_str, ';');
+    }
 
-	}
+    if(c->secure) {
+        append_string(&cookie_str, "Secure");
+        arrput(cookie_str, ';');
+    }
 
-	if(c->path) {
-		append_string(&cookie_str, "Path=");
-		append_string(&cookie_str, c->path);
-		arrput(cookie_str, ';');
+    if(c->http_only) {
+        append_string(&cookie_str, "HttpOnly");
+        arrput(cookie_str, ';');
+    }
 
-	}
+    arrput(cookie_str, '\0');
 
-	if(c->same_site) {
-		append_string(&cookie_str, "SameSite");
-		arrput(cookie_str, ';');
-
-	}
-
-	if(c->secure) {
-		append_string(&cookie_str, "Secure");
-		arrput(cookie_str, ';');
-
-	}
-
-	if(c->http_only) {
-		append_string(&cookie_str, "HttpOnly");
-		arrput(cookie_str, ';');
-	}
-
-	arrput(cookie_str, '\0');
-
-	add_custom_header("Set-Cookie", cookie_str, header);
-
-
+    add_custom_header("Set-Cookie", cookie_str, header);
 }
 endpoint_config *new_endpoint_config() {
-	endpoint_config *config = calloc(1, sizeof(endpoint_config));
-	return config;
+    endpoint_config *config = calloc(1, sizeof(endpoint_config));
+    return config;
 }
 
 endpoint_config_item *new_endpoint_config_hash() {
-	endpoint_config_item *endpoint_config_hash = calloc(1, sizeof(endpoint_config_item));
-	sh_new_arena(endpoint_config_hash);
-	shdefault(endpoint_config_hash, NULL);
-	return endpoint_config_hash;
+    endpoint_config_item *endpoint_config_hash = calloc(1, sizeof(endpoint_config_item));
+    sh_new_arena(endpoint_config_hash);
+    shdefault(endpoint_config_hash, NULL);
+    return endpoint_config_hash;
 }
 
-request *new_empty_request() {
-    request *req = (request *)malloc(sizeof(request));
+cwf_request *new_empty_request() {
+    cwf_request *req = (cwf_request *)malloc(sizeof(cwf_request));
     req->method = NULL;
     req->urlencoded_data = NULL;
     req->data_type = NULL;
@@ -395,133 +379,134 @@ request *new_empty_request() {
     return req;
 }
 
-void generate_default_404_header() {
-    fprintf(stdout, "Status: 404 Not Found\r\n");
-    fprintf(stdout, "Content-type: text/html\r\n\r\n");
+void cwf_generate_default_404_header(http_header *headers) {
+    add_custom_header("Status", "404 Not Found", headers);
+    add_custom_header("Content-type", "text/html", headers);
 }
 
-endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
+endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING,
+                                     endpoint_config_item *endpoints_cfg) {
+    char *str = (char *)REQUEST_URI;
 
-	char *str = (char*)REQUEST_URI;
+    endpoint_config *it;
+    char *tmp = NULL;
 
-	endpoint_config *it;
-	char  *tmp = NULL;
+    int uri_len = strlen(REQUEST_URI);
 
-	int uri_len = strlen(REQUEST_URI);
+    if(uri_len > 1) {
+        str = str + 1;
+    }
 
-	if(uri_len > 1) {
-		str = str + 1;
-	}
+    if(!*QUERY_STRING) {
+        char *first_slash = strchr(str, '/');
+        if(first_slash) {
+            if(uri_len > 1) {
+                tmp = strndup(str, (int)(first_slash - str));
+            } else {
+                tmp = strdup(str);
+            }
+        } else {
+            tmp = strdup(str);
+        }
 
-	if(!*QUERY_STRING) {
-		char *first_slash = strchr(str, '/');
-		if(first_slash) {
-			if(uri_len > 1) {
-				tmp = strndup(str, (int)(first_slash - str));
-			}
-			else {
-				tmp = strdup(str);
-			}
-		} else {
-			tmp = strdup(str);
-		}
+        it = shget(endpoints_cfg, tmp);
 
-		it = shget(endpoints_cfg, tmp);
+        if(it && it->params) {
+            int expected_params = arrlen(it->params);
+            char err[1024];
 
-		if(it && it->params) {
+            if(first_slash) {
+                char *aux = strdup(first_slash + 1);
 
-			int expected_params = arrlen(it->params);
-			char err[1024];
+                char *pch;
+                pch = strtok(aux, "/");
+                int num_params = 0;
 
-			if(first_slash) {
+                while(pch != NULL) {
+                    url_params url_params;
+                    if(num_params < expected_params) {
+                        url_params = it->params[num_params];
+                    } else {
+                        sprintf(err, "Number of parameters exceed the configured number of parameters (%d).\n",
+                                expected_params);
+                        concat_error_msg(&(it->error), err);
+                        break;
+                    }
 
-				char *aux = strdup(first_slash + 1);
+                    switch(url_params.type) {
+                        case STRING:
+                            break;
+                        case INT:
+                            if(!is_int(pch)) {
+                                sprintf(err, "%s is configured to be an integer but %s is not a valid integer.\n",
+                                        url_params.name, pch);
+                                concat_error_msg(&(it->error), err);
+                            }
+                            break;
+                        case FLOAT:
+                            if(!is_float(pch)) {
+                                sprintf(err, "%s is configured to be a float but %s is not a valid float.\n",
+                                        url_params.name, pch);
+                                concat_error_msg(&(it->error), err);
+                            }
+                            break;
+                        default:
+                            sprintf(err, "%s is configured to an invalid type. Valid types are i, s or f.\n",
+                                    url_params.name);
+                            concat_error_msg(&(it->error), err);
+                            break;
+                    }
 
-				char * pch;
-				pch = strtok (aux, "/");
-				int num_params = 0;
+                    it->params[num_params].value = strdup(pch);
 
-				while (pch != NULL) {
-					url_params url_params;
-					if(num_params < expected_params) {
-						url_params = it->params[num_params];
-					}
-					else {
-						sprintf(err, "Number of parameters exceed the configured number of parameters (%d).\n", expected_params);
-						concat_error_msg(&(it->error), err);
-						break;
-					}	
+                    num_params++;
 
-					switch (url_params.type) {
-						case STRING:
-							break;
-						case INT:
-							if(!is_int(pch)) {
-								sprintf(err, "%s is configured to be an integer but %s is not a valid integer.\n", url_params.name, pch);
-								concat_error_msg(&(it->error), err);
-							}
-							break;
-						case FLOAT:
-							if(!is_float(pch)) {
-								sprintf(err, "%s is configured to be a float but %s is not a valid float.\n", url_params.name, pch);
-								concat_error_msg(&(it->error), err);
-							}
-							break;
-						default:
-							sprintf(err, "%s is configured to an invalid type. Valid types are i, s or f.\n", url_params.name);
-							concat_error_msg(&(it->error), err);
-							break;
-					}
+                    pch = strtok(NULL, "/");
+                }
 
-					it->params[num_params].value = strdup(pch);
+                free(aux);
 
-					num_params++;
+                if(num_params != expected_params) {
+                    sprintf(err,
+                            "Number of parameters are different from the configured number of parameters (received %d, "
+                            "expected %d).\n",
+                            num_params, expected_params);
+                    concat_error_msg(&(it->error), err);
+                }
+            } else {
+                sprintf(err,
+                        "Number of parameters are different from the configured number of parameters (received 0, "
+                        "expected %d).\n",
+                        expected_params);
+                concat_error_msg(&(it->error), err);
+            }
+        }
 
-					pch = strtok (NULL, "/");
-				}
+    } else {
+        char *question_mark = strchr(str, '?');
+        int q_index = (int)(question_mark - str);
+        tmp = strndup(str, q_index);
 
-				free(aux);
+        if(!*tmp) {
+            free(tmp);
+            tmp = strdup("/");
+        }
 
-				if(num_params != expected_params) {
-					sprintf(err, "Number of parameters are different from the configured number of parameters (received %d, expected %d).\n", num_params, expected_params);
-					concat_error_msg(&(it->error), err);
-				}
-			}
-			else {
-				sprintf(err, "Number of parameters are different from the configured number of parameters (received 0, expected %d).\n", expected_params);
-				concat_error_msg(&(it->error), err);
+        it = shget(endpoints_cfg, tmp);
+    }
 
-			}
-
-		} 
-
-	}
-	else {
-		char *question_mark = strchr(str, '?');
-		int q_index = (int)(question_mark - str);
-		tmp = strndup(str, q_index);
-
-		if(!*tmp) {
-			free(tmp);
-			tmp = strdup("/");
-		}
-
-		it = shget(endpoints_cfg, tmp);
-	}
-
-	free(tmp);
-	return it;
-
+    free(tmp);
+    return it;
 }
 
-void add_params_to_request(request *req, url_params *params) {
-	for(int i = 0; i < arrlen(params); i++) {
-		shput(req->urlencoded_data, params[i].name, strdup(params[i].value)); 
-	}
+void add_params_to_request(cwf_request *req, url_params *params) {
+    for(int i = 0; i < arrlen(params); i++) {
+        shput(req->urlencoded_data, params[i].name, strdup(params[i].value));
+    }
 }
 
-request *new_from_env_vars() {
-    request *req = new_empty_request();
+cwf_request *new_from_env_vars() {
+    cwf_request *req = new_empty_request();
 
     shput(req->server_data, "HTTP_ACCEPT", getenv("HTTP_ACCEPT"));
     shput(req->server_data, "HTTP_COOKIE", getenv("HTTP_COOKIE"));
@@ -582,11 +567,11 @@ request *new_from_env_vars() {
 
     req->method = getenv("REQUEST_METHOD");
 
-    if(IS_GET(req)) {
+    if(IS_REQ_GET(req)) {
         decode_query(&req->urlencoded_data, getenv("QUERY_STRING"));
         req->data_type = "urlencoded";
         req->data_len = shlen(req->urlencoded_data);
-    } else if(IS_POST(req)) {
+    } else if(IS_REQ_POST(req)) {
         const char *env;
         int len;
 
@@ -608,317 +593,431 @@ request *new_from_env_vars() {
     return req;
 }
 
-char *SERVER(request *req, char *key) {
+char *cwf_server_vars(cwf_request *req, char *key) {
     return shget(req->server_data, key);
 }
 
-char *GET(request *req, char *key) {
-    if(IS_GET(req)) {
+char *cwf_get_vars(cwf_request *req, char *key) {
+    if(IS_REQ_GET(req)) {
         return shget(req->urlencoded_data, key);
     }
 
     return NULL;
 }
 
-char *POST(request *req, char *key) {
-    if(IS_POST(req)) {
-		return shget(req->urlencoded_data, key);
+char *cwf_post_vars(cwf_request *req, char *key) {
+    if(IS_REQ_POST(req)) {
+        return shget(req->urlencoded_data, key);
     }
     return NULL;
 }
 
-int render_template(TMPL_varlist *varlist, const char *template_path) {
-    
-	fputs("Content-type: text/html\r\n\r\n", stdout);
+sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_header *headers) {
 
-    int ret = 0;
+    add_custom_header("Content-type", "text/html", headers);
 
     TMPL_fmtlist *fmtlist;
-
     fmtlist = TMPL_add_fmt(0, "entity", TMPL_encode_entity);
     TMPL_add_fmt(fmtlist, "url", TMPL_encode_url);
-    ret = TMPL_write(template_path, 0, fmtlist, varlist, stdout, stderr) != 0;
+
+	sds template_str = sdsempty();
+
+    int ret = TMPL_write(template_path, 0, fmtlist, varlist, &template_str, NULL, stderr) != 0;
+
 
     TMPL_free_fmtlist(fmtlist);
     TMPL_free_varlist(varlist);
 
-    return ret;
+    return template_str;
 }
 
 cfw_database *open_database(const char *db_filename) {
+    cfw_database *database = calloc(1, sizeof(cfw_database));
 
-	cfw_database *database = calloc(1, sizeof(cfw_database));
+    int rc = sqlite3_open(db_filename, &(database->db));
 
-	int rc = sqlite3_open(db_filename, &(database->db));
+    if(rc != SQLITE_OK) {
+        database->error = strdup(sqlite3_errmsg(database->db));
+        sqlite3_close(database->db);
+    }
 
-	if (rc != SQLITE_OK) {
-		database->error = strdup(sqlite3_errmsg(database->db));
-		sqlite3_close(database->db);
-	}
-
-	return database;
-
+    return database;
 }
 
 static int sqlite_callback(void *cfw_db, int num_results, char **column_values, char **column_names) {
+    if(num_results) {
+        cfw_database *database = (cfw_database *)cfw_db;
 
-	if(num_results) {	
+        record *line;
+        sh_new_strdup(line);
+        shdefault(line, NULL);
 
-		cfw_database *database = (cfw_database *)cfw_db;
+        int num_records = 0;
 
-		record *line;
-		sh_new_strdup(line);
-		shdefault(line, NULL);
+        for(int i = 0; i < num_results; i++) {
+            if(column_names[i]) {
+                shput(line, strdup(column_names[i]), strdup(column_values[i]));
+                num_records++;
+            }
+        }
 
-		int num_records = 0;
+        arrput(database->records, line);
+        database->num_records += 1;
+    }
 
-		for (int i = 0; i < num_results; i++) {
-			if(column_names[i]) {
-				shput(line, strdup(column_names[i]), strdup(column_values[i]));
-				num_records++;
-			}
-		}
-
-		arrput(database->records, line);
-		database->num_records += 1;
-	}
-
-	return 0;
-
+    return 0;
 }
 
 void execute_query(const char *query, cfw_database *database) {
+    char *errmsg;
 
-	char *errmsg;
+    // TODO: We will have to free all records
+    if(database->records) {
+        arrfree(database->records);
+        database->records = NULL;
+        database->num_records = 0;
+    }
 
-	//TODO: We will have to free all records
-	if(database->records) { 
-		arrfree(database->records);
-		database->records = NULL;
-		database->num_records = 0;
-	}
+    int rc = sqlite3_exec(database->db, query, sqlite_callback, (void *)database, &errmsg);
 
-	int rc = sqlite3_exec(database->db, query, sqlite_callback, (void *)database, &errmsg);
-
-	if (rc != SQLITE_OK ) {
-		database->error = strdup(errmsg);
-		sqlite3_close(database->db);
-		sqlite3_free(errmsg);            	
-	}
+    if(rc != SQLITE_OK) {
+        database->error = strdup(errmsg);
+        sqlite3_close(database->db);
+        sqlite3_free(errmsg);
+    }
 }
 
 int get_num_columns(record *r) {
-	return shlen(r);
+    return shlen(r);
 }
 
-TMPL_varlist *request_to_varlist(TMPL_varlist *varlist, request *req, modify_db_name_value_fn *modify) {
-	for(int i = 0; i < shlen(req->urlencoded_data); i++) {
-		char *name = strdup(req->urlencoded_data[i].key);
-			char *value = strdup(req->urlencoded_data[i].value);
 
-			if(modify) {
-				modify(name, value);
-			}
+TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value_fn *modify, cwf_request *req) {
+    for(int i = 0; i < shlen(req->urlencoded_data); i++) {
+        char *name = strdup(req->urlencoded_data[i].key);
+        char *value = strdup(req->urlencoded_data[i].value);
 
-			varlist = TMPL_add_var(varlist, name, value, 0);
-	}
+        if(modify) {
+            modify(name, value);
+        }
 
-	return varlist;
+        varlist = TMPL_add_var(varlist, name, value, 0);
+    }
+
+    return varlist;
 }
 
 TMPL_varlist *db_record_to_varlist(TMPL_varlist *varlist, cfw_database *database, modify_db_name_value_fn *modify) {
+    for(int i = 0; i < database->num_records; i++) {
+        for(int j = 0; j < get_num_columns(database->records[i]); j++) {
+            char *name = strdup(database->records[i][j].key);
+            char *value = strdup(database->records[i][j].value);
 
-	for(int i = 0; i < database->num_records; i++) {
+            if(modify) {
+                modify(name, value);
+            }
 
-		for(int j = 0; j < get_num_columns(database->records[i]); j++) {
-			char *name = strdup(database->records[i][j].key);
-			char *value = strdup(database->records[i][j].value);
+            varlist = TMPL_add_var(varlist, name, value, 0);
+        }
+    }
 
-			if(modify) {
-				modify(name, value);
-			}
-
-			varlist = TMPL_add_var(varlist, name, value, 0);
-		}
-
-	}
-
-	return varlist;
+    return varlist;
 }
 
-TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name, modify_db_name_value_fn *modify) {
- 
-	TMPL_loop  *loop = 0;
+TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name,
+                                 modify_db_name_value_fn *modify) {
+    TMPL_loop *loop = 0;
 
-	for(int i = 0; i < database->num_records; i++) {
-		TMPL_varlist *loop_varlist = 0;
+    for(int i = 0; i < database->num_records; i++) {
+        TMPL_varlist *loop_varlist = 0;
 
-		for(int j = 0; j < get_num_columns(database->records[i]); j++) {
-			char *name = strdup(database->records[i][j].key);
-			char *value = strdup(database->records[i][j].value);
+        for(int j = 0; j < get_num_columns(database->records[i]); j++) {
+            char *name = strdup(database->records[i][j].key);
+            char *value = strdup(database->records[i][j].value);
 
-			if(modify) {
-				modify(name, value);
-			}
+            if(modify) {
+                modify(name, value);
+            }
 
-			loop_varlist = TMPL_add_var(loop_varlist, name, value, 0);
-		}
+            loop_varlist = TMPL_add_var(loop_varlist, name, value, 0);
+        }
 
-		loop = TMPL_add_varlist(loop, loop_varlist);
-	}
+        loop = TMPL_add_varlist(loop, loop_varlist);
+    }
 
     varlist = TMPL_add_loop(varlist, loop_name, loop);
 
-	return varlist;
+    return varlist;
 }
 
 char_array strip_html_tags(const char *buf) {
-	
-	char_array result = NULL;	
-	bool opened = false;
+    char_array result = NULL;
+    bool opened = false;
 
-	int len = strlen(buf);
+    int len = strlen(buf);
 
-	for(int i = 0; i < len; i++) {
-		if(buf[i] == '<') {
-			opened = true;
-		} else if (buf[i] == '>') {
-			opened = false;
-		} else if (!opened) {
-			arrput(result, buf[i]);
-		}
-	}
+    for(int i = 0; i < len; i++) {
+        if(buf[i] == '<') {
+            opened = true;
+        } else if(buf[i] == '>') {
+            opened = false;
+        } else if(!opened) {
+            arrput(result, buf[i]);
+        }
+    }
 
-	arrput(result, '\0');
+    arrput(result, '\0');
 
-	return result;
-
+    return result;
 }
 
-static bool simpleSHA256(void* input, unsigned long length, unsigned char* md) {
+static bool simpleSHA256(void *input, unsigned long length, unsigned char *md) {
     SHA256_CTX context;
-    if(!SHA256_Init(&context))
-        return false;
+    if(!SHA256_Init(&context)) return false;
 
-    if(!SHA256_Update(&context, (unsigned char*)input, length))
-        return false;
+    if(!SHA256_Update(&context, (unsigned char *)input, length)) return false;
 
-    if(!SHA256_Final(md, &context))
-        return false;
+    if(!SHA256_Final(md, &context)) return false;
 
     return true;
 }
 
-char *generate_b64_session_id() {
-	char buf[40];
-	sprintf(buf, "%ld", time(NULL));
+static char *generate_session_id() {
+    char buf[40];
+    sprintf(buf, "%ld", time(NULL));
 
-	unsigned char sha[32];
-	simpleSHA256(buf, strlen(buf), sha);
+    unsigned char sha[32];
+    simpleSHA256(buf, strlen(buf), sha);
 
-	char *b64 = CGI_encode_base64(sha, 32);
+    char *b64 = CGI_encode_base64(sha, 32);
 
-	return(b64);
-}
+	int len = strlen(b64);
 
-void redirect(const char *url) {
-
-	char *tmp = (char*) url;
-
-	if(strlen(url) > 1) {
-
-		if(url[0] == '/') {
-			tmp = tmp + 1;
-		}
-		fprintf(stdout, "Location:%s\r\n\r\n", tmp);
-	}
-	else if ( strlen(url) == 1 && *url == '/') {
-		fprintf(stdout, "Location:%s://%s/\r\n\r\n", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
-	}
-		
-}
-
-
-
-
-////////////////////SESSION/////////////////
-
-typedef struct session_t {
-	cookie *cookie;
-	record *data;
-} session;
-
-//TODO: this is only a silly test.. we should think in another way to store the session files. GDBM maybe?
-static void read_session_file(FILE *session_file) {
-
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t nread;
-	char *key;
-	char *value;
-	int count = 0;
-
-	while ((nread = getline(&line, &len, session_file)) != -1) {
-		if(count % 2 == 0) {
-			key = strdup(line);
-		}
-		else {
-			shput(__SESSION__->data, key, strdup(line));
-			free(key);
-		}
+	for(int i = 0; i < len; i++) {
+		if(b64[i] == '/') b64[i] = '_';
 	}
 
-	free(line);
+    return (b64);
 }
 
-//https://alexwebdevelop.com/php-sessions-explained/
-//TODO: save the session values in main.c?
-//This function has to be called after adding and writing any headers
-//TODO: maybe the session can be inside the request?
-void session_start(http_header *headers) {        
-	//TODO: section needs to have a lock to access the session file. I thing we will need a semaphore here to handle simultaneos connections.
-	//If a section is readonly we dont need to bother with the lockfile
-	if (__SESSION__ == NULL) {
+void cwf_redirect(const char *url, http_header *headers) {
+    char *tmp = (char *)url;
+
+    // TODO: use sds for this kind of operation
+    char value[1024];
+
+    if(strlen(url) > 1) {
+        if(url[0] == '/') {
+            tmp = tmp + 1;
+        }
+        // fprintf(stdout, "Location:%s\r\n\r\n", tmp);
+        sprintf(value, "%s", tmp);
+    } else if(strlen(url) == 1 && *url == '/') {
+        // fprintf(stdout, "Location:%s://%s/\r\n\r\n", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
+        sprintf(value, "%s://%s/", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
+    }
+
+    add_custom_header("Location", value, headers);
+}
+
+// TODO: this is only a silly test.. we should think in another way to store the session files. GDBM maybe?
+static void read_session_file(cwf_session *session, FILE *session_file) {
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+    char *key;
+    char *value;
+    int count = 0;
+
+    while((nread = getline(&line, &len, session_file)) != -1) {
+        if(count % 2 == 0) {
+            key = strdup(line);
+        } else {
+            shput(session->data, key, strdup(line));
+            free(key);
+        }
+    }
+
+    free(line);
+}
+
+static int sqlite_callback_for_session(void *data, int num_results, char **column_values, char **column_names) {
+    if(num_results) {
+        record **line = (record **)data;
+
+        int num_records = 0;
+
+        for(int i = 0; i < num_results; i += 2) {
+            shput(*line, strdup(column_values[i]), strdup(column_values[i + 1]));
+        }
+    }
+
+    return 0;
+}
+
+static void execute_query_for_session(const char *query, sqlite3 *db, record **data) {
+    char *errmsg;
+
+    // TODO: We will have to free all records
+    if(*data) {
+        arrfree(*data);
+        *data = NULL;
+        sh_new_arena(*data);
+        shdefault(*data, NULL);
+    }
+
+    int rc = sqlite3_exec(db, query, sqlite_callback_for_session, (void *)data, &errmsg);
+
+    // TODO: handle error
+    if(rc != SQLITE_OK) {
+    }
+}
+
+// https://alexwebdevelop.com/php-sessions-explained/
+// TODO: save the session values in main.c?
+// This function has to be called after adding and writing any headers
+// TODO: maybe the session can be inside the request?
+void cwf_session_start(cwf_session **session, http_header *headers) {
+    // TODO: section needs to have a lock to access the session file. I thing we will need a semaphore here to handle
+    // simultaneos connections. If a section is readonly we dont need to bother with the lockfile
+    if(*session == NULL) {
+        *session = calloc(1, sizeof(session));
+
+        (*session)->cookie = get_cookie();
+
+        if(!(*session)->cookie) {
+            char *sid = generate_session_id();
+            (*session)->cookie = new_cookie("sid", sid);
+            sh_new_arena((*session)->data);
+            shdefault((*session)->data, NULL);
+
+            // TODO: let the user define a expire time and the other cookie settings
+            (*session)->cookie->expires = 12 * 30 * 24 * 60 * 60;
+            (*session)->cookie->domain = getenv("SERVER_NAME");
+            add_cookie_to_header((*session)->cookie, headers);
+
+            char session_file_name[128];
+            // TODO: use c11 to avoid insecure string functions
+            sprintf(session_file_name, "/var/www/cwf/session_%s", sid);
+            (*session)->db_filename = strdup(session_file_name);
+
+            free(sid);
+
+            // We only need to create a new file for the session
+            sqlite3 *session_file;
+            int rc =
+                sqlite3_open_v2(session_file_name, &session_file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, NULL);
+
+            // TODO: handle session errors
+            if(rc != SQLITE_OK) {
+                const char *err = sqlite3_errmsg(session_file);
+                fprintf(stderr, "%s\n", err);
+                sqlite3_close(session_file);
+            }
+
+            char *sql = "DROP TABLE IF EXISTS session_data;";
+            char *sql2 = "CREATE TABLE session_data (key TEXT PRIMARY KEY, value TEXT);";
+            char *error;
+            rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
+
+            // TODO: handle session errors
+            if(rc != SQLITE_OK) {
+                sqlite3_close(session_file);
+            }
+
+            rc = sqlite3_exec(session_file, sql2, NULL, NULL, &error);
+
+            // TODO: handle session errors
+            if(rc != SQLITE_OK) {
+                sqlite3_close(session_file);
+            }
+
+            sqlite3_close(session_file);
+
+        } else {
+            char session_file_name[1024];
+            // TODO: use c11 to avoid insecure string functions
+            sprintf(session_file_name, "/var/www/cwf/session_%s", (*session)->cookie->value);
+            (*session)->db_filename = strdup(session_file_name);
+
+            // We only need to create a new file for the session
+            sqlite3 *session_file;
+            int rc = sqlite3_open((*session)->db_filename, &session_file);
+
+            // TODO: handle session errors
+            if(rc != SQLITE_OK) {
+                sqlite3_close(session_file);
+            }
+
+            char *sql = "SELECT * from session_data;";
+            execute_query_for_session(sql, session_file, &(*session)->data);
+            sqlite3_close(session_file);
+        }
+    }
+}
+
+void cwf_session_destroy(cwf_session **session, http_header *headers) {
+	if(*session == NULL) {
+		return;
+	} else {
+		char session_file_name[1024];
 	
-		__SESSION__ = calloc(1, sizeof(session));
-
-		__SESSION__->cookie = get_cookie();
-
-		if(!__SESSION__->cookie) {
-			char *sid = generate_b64_session_id();
-			__SESSION__->cookie = new_cookie("sid", sid);
-			sh_new_arena(__SESSION__->data);
-			shdefault(__SESSION__->data, NULL);
-
-			//TODO: let the user define a expire time and the other cookie settings
-			__SESSION__->cookie->expires = 12 * 30 * 24 * 60 * 60;
-			__SESSION__->cookie->domain = getenv("SERVER_NAME");
-			add_cookie_to_header(__SESSION__->cookie, headers);
-
-			char session_file_name[46];
-			//TODO: use c11 to avoid insecure string functions
-			sprintf(session_file_name, "/tmp/section_%s", sid);
-			
-			//We only need to create a new file for the session
-			FILE *session_file = fopen(session_file_name, "w");		
-			fclose(session_file);
-			free(sid);
-		}
-		else {
-			char session_file_name[41];
+		// TODO: use c11 to avoid insecure string functions
+		sprintf(session_file_name, "/var/www/cwf/session_%s", (*session)->cookie->value);
+	
+		//shfree((*session)->data);
 		
-			//TODO: use c11 to avoid insecure string functions
-			//TODO: let the user change the session path
-			sprintf(session_file_name, "/tmp/section_%s", __SESSION__->cookie->value);
-			
-			//We only need to create a new file for the session
-			FILE *session_file = fopen(session_file_name, "r");		
-			read_session_file(session_file);
-			fclose(session_file);
-		}
-	}
+		(*session)->cookie->expires = -3600;
+		add_cookie_to_header((*session)->cookie, headers);
+	
+		free_cookie((*session)->cookie);
+
+		free((*session)->db_filename);
+
+		free(*session);
+		*session = NULL;
+    }
 }
 
-char *SESSION(const char *key) {
-	return shget(__SESSION__->data, key);
+
+void cwf_save_session(cwf_session *session) {
+    if(!session) return;
+
+    sqlite3 *session_file;
+    int rc = sqlite3_open(session->db_filename, &session_file);
+
+    // TODO: handle session errors
+    if(rc != SQLITE_OK) {
+        sqlite3_close(session_file);
+    }
+
+    int len = shlen(session->data);
+
+    // TODO: lets change this to use sds...
+    char sql[1024];
+
+    for(int i = 0; i < len; i++) {
+        // TODO: create a single query to avoid this loop
+        sprintf(sql, "REPLACE INTO session_data (key, value) VALUES('%s', '%s')", session->data[i].key, session->data[i].value);
+
+		char *error; 
+		rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
+
+        // TODO: handle session errors
+        if(rc != SQLITE_OK) {
+			printf("%s\n", error);
+            sqlite3_close(session_file);
+            break;
+        }
+    }
+
+    sqlite3_close(session_file);
+}
+
+char *cwf_session_get(cwf_session *session, const char *key) {
+    return shget(session->data, key);
+}
+
+char *cwf_session_put(cwf_session *session, const char *key, const char *value) {
+    return shput(session->data, key, strdup(value));
 }
