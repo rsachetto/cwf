@@ -7,7 +7,8 @@
 #include "src/cwf.h"
 #include "src/ini_parse.h"
 
-// TODO: create a ini file to configure the site options like the debug_seter and the endpoints file
+//@todo: create a ini file to configure the site options like the debug_seter and the endpoints file
+//@todo add CSRF protection - https://owasp.org/www-community/attacks/csrf https://codefellows.github.io/sea-python-401d4/lectures/pyramid_day6_csrf.html
 #define ENDPOINTS_FILE "/var/www/cwf/endpoints.ini"
 
 #ifdef GDB_DEBUG
@@ -27,7 +28,7 @@ int main(int argc, char **argv) {
     cwf_vars *cwf_vars = calloc(1, sizeof(cwf_vars));
     cwf_vars->request = new_from_env_vars();
 
-    // TODO: create a config file to set this variables
+    //@todo: create a config file to set this variables
     cwf_vars->print_debug_info = true;
 
     void *handle = dlopen(ENDPOINT_LIB_PATH, RTLD_LAZY);
@@ -39,7 +40,7 @@ int main(int argc, char **argv) {
 
     endpoint_fn *endpoint_function;
 
-    // TODO: here we have to parse the URL and configure the correct endpoint for the function
+    //@todo: here we have to parse the URL and configure the correct endpoint for the function
     char *config_file = ENDPOINTS_FILE;
     endpoint_config_item *endpoint_configs = new_endpoint_config_hash();
 
@@ -80,7 +81,7 @@ int main(int argc, char **argv) {
         if(!endpoint_config->error) {
             add_params_to_request(cwf_vars->request, endpoint_config->params);
         } else {
-            // TODO: include an error message on the endpoint_config
+            //@todo: include an error message on the endpoint_config
             generate_default_404_header();
 
             if(cwf_vars->print_debug_info)
@@ -98,7 +99,7 @@ int main(int argc, char **argv) {
 	if(reponse)
 		fprintf(stdout, "%s", reponse);
     cwf_save_session(cwf_vars->session);
-    // TODO: maybe we will also need to release the file locks if the section is not readonly
+    //@todo maybe we will also need to release the file locks if the section is not readonly
     return 0;
 }
 

@@ -12,87 +12,6 @@
 
 #define ENDSWITH(s, c) (s)[strlen((s)) - 1] == (c)
 
-/*These are from ccgi*/
-
-static char *scanspaces(char *p) {
-    while(*p == ' ' || *p == '\t') {
-        p++;
-    }
-    return p;
-}
-
-static char *scanattr(char *p, char *attr[2]) {
-    int quote = 0;
-
-    attr[0] = p = scanspaces(p);
-    while(*p != '=' && *p != 0) {
-        p++;
-    }
-    if(*p != '=' || p == attr[0]) {
-        return 0;
-    }
-    *p++ = 0;
-    if(*p == '"' || *p == '\'' || *p == '`') {
-        quote = *p++;
-    }
-    attr[1] = p;
-    if(quote != 0) {
-        while(*p != quote && *p != 0) {
-            p++;
-        }
-        if(*p != quote) {
-            return 0;
-        }
-        *p++ = 0;
-        if(*p == ';') {
-            p++;
-        }
-    } else {
-        while(*p != ';' && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' && *p != 0) {
-            p++;
-        }
-        if(*p != 0) {
-            *p++ = 0;
-        }
-    }
-    return p;
-}
-
-static int hex(int digit) {
-    switch(digit) {
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7':
-        case '8':
-        case '9':
-            return digit - '0';
-
-        case 'A':
-        case 'B':
-        case 'C':
-        case 'D':
-        case 'E':
-        case 'F':
-            return 10 + digit - 'A';
-
-        case 'a':
-        case 'b':
-        case 'c':
-        case 'd':
-        case 'e':
-        case 'f':
-            return 10 + digit - 'a';
-
-        default:
-            return -1;
-    }
-}
-
 static void decode_query(request_item **v, const char *query) {
     char *buf;
     const char *name, *value;
@@ -137,7 +56,7 @@ static void decode_query(request_item **v, const char *query) {
                 continue;
 
             case '%':
-                if((L = hex(query[i + 1])) >= 0 && (R = hex(query[i + 2])) >= 0) {
+                if((L = CGI_hex(query[i + 1])) >= 0 && (R = CGI_hex(query[i + 2])) >= 0) {
                     buf[k++] = (L << 4) + R;
                     i += 2;
                     continue;
@@ -233,7 +152,8 @@ cwf_cookie *get_cookie() {
     }
     buf = (char *)malloc(strlen(env) + 1);
     p = strcpy(buf, env);
-    while((p = scanattr(p, cookie_data)) != 0) {
+
+    while((p = CGI_scanattr(p, cookie_data)) != 0) {
         if(v->name == NULL) {
             v->name = strdup(cookie_data[0]);
             v->value = strdup(cookie_data[1]);
@@ -281,7 +201,8 @@ http_header new_empty_header() {
 }
 
 void add_custom_header(const char *name, const char *value, http_header *header) {
-    shput(*header, name, strdup(value));
+	if(value)
+	    shput(*header, name, strdup(value));
 }
 
 static inline void append_string(char_array *string, const char *to_append) {
@@ -292,70 +213,52 @@ static inline void append_string(char_array *string, const char *to_append) {
     }
 }
 
-// TODO: this can be much faster if we do memcpy instead of fors
+//@todo this can be much faster if we do memcpy instead of fors
 void add_cookie_to_header(cwf_cookie *c, http_header *header) {
-    if(!c || !c->name || !c->value) return;
+	if(!c || !c->name || !c->value) return;
 
-    int cookie_str_size = strlen(c->name);
-    cookie_str_size += strlen(c->value);
-    cookie_str_size += 2;  // = and ;
+	int cookie_str_size = strlen(c->name);
+	cookie_str_size += strlen(c->value);
+	cookie_str_size += 2;  // = and ;
 
-    char_array cookie_str = NULL;
-    arrsetcap(cookie_str, cookie_str_size);
+	sds cookie_str = sdsnew(c->name);
 
-    append_string(&cookie_str, c->name);
-    arrput(cookie_str, '=');
-    append_string(&cookie_str, c->value);
-    arrput(cookie_str, ';');
+	cookie_str = sdscatfmt(cookie_str, "=%s;", c->value);
 
-    //if(c->expires > 0) {
-        char buf[40];
-        time_t cookie_date = c->expires + time(NULL);
-        struct tm tm = *gmtime(&cookie_date);
-        strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
-        append_string(&cookie_str, "Expires=");
-        append_string(&cookie_str, buf);
-        arrput(cookie_str, ';');
-    //}
+	char buf[64];
+	time_t cookie_date = c->expires + time(NULL);
+	struct tm tm = *gmtime(&cookie_date);
+	strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
 
-    if(c->max_age > 0) {
-        char buf[40];
-        sprintf(buf, "%d", c->max_age);
-        append_string(&cookie_str, "Max-Age=");
-        append_string(&cookie_str, buf);
-        arrput(cookie_str, ';');
-    }
+	cookie_str = sdscatfmt(cookie_str, "Expires=%s;", buf);
 
-    if(c->domain) {
-        append_string(&cookie_str, "Domain=");
-        append_string(&cookie_str, c->domain);
-        arrput(cookie_str, ';');
-    }
+	if(c->max_age > 0) {
+		cookie_str = sdscatfmt(cookie_str, "Max-Age=%i;", c->max_age);
+	}
 
-    if(c->path) {
-        append_string(&cookie_str, "Path=");
-        append_string(&cookie_str, c->path);
-        arrput(cookie_str, ';');
-    }
+	if(c->domain) {
+		cookie_str = sdscatfmt(cookie_str, "Domain=%s;", c->domain);
+	}
 
-    if(c->same_site) {
-        append_string(&cookie_str, "SameSite");
-        arrput(cookie_str, ';');
-    }
+	if(c->path) {
+		cookie_str = sdscatfmt(cookie_str, "Path=%s;", c->path);
+	}
 
-    if(c->secure) {
-        append_string(&cookie_str, "Secure");
-        arrput(cookie_str, ';');
-    }
+	if(c->same_site) {
+		cookie_str = sdscatfmt(cookie_str, "SameSite;");
+	}
 
-    if(c->http_only) {
-        append_string(&cookie_str, "HttpOnly");
-        arrput(cookie_str, ';');
-    }
+	if(c->secure) {
+		cookie_str = sdscatfmt(cookie_str, "Secure;");
+	}
 
-    arrput(cookie_str, '\0');
+	if(c->http_only) {
+		cookie_str = sdscatfmt(cookie_str, "HttpOnly;");
+	}
 
-    add_custom_header("Set-Cookie", cookie_str, header);
+	add_custom_header("Set-Cookie", cookie_str, header);
+
+	sdsfree(cookie_str);
 }
 endpoint_config *new_endpoint_config() {
     endpoint_config *config = calloc(1, sizeof(endpoint_config));
@@ -585,8 +488,7 @@ cwf_request *new_from_env_vars() {
             req->data_type = "json";
 
         } else {  // multipart
-            // TODO: handle multpart input (get from liccgi)
-            //
+            //@todo handle multpart input (get from liccgi)
         }
     }
 
@@ -671,7 +573,7 @@ static int sqlite_callback(void *cfw_db, int num_results, char **column_values, 
 void execute_query(const char *query, cfw_database *database) {
     char *errmsg;
 
-    // TODO: We will have to free all records
+    // @todo We will have to free all records
     if(database->records) {
         arrfree(database->records);
         database->records = NULL;
@@ -801,26 +703,26 @@ static char *generate_session_id() {
 }
 
 void cwf_redirect(const char *url, http_header *headers) {
-    char *tmp = (char *)url;
+    
+	char *tmp = (char *)url;
 
-    // TODO: use sds for this kind of operation
-    char value[1024];
+    sds value = NULL;
 
     if(strlen(url) > 1) {
         if(url[0] == '/') {
             tmp = tmp + 1;
         }
-        // fprintf(stdout, "Location:%s\r\n\r\n", tmp);
-        sprintf(value, "%s", tmp);
+
+		value = sdsnew(tmp);
+
     } else if(strlen(url) == 1 && *url == '/') {
-        // fprintf(stdout, "Location:%s://%s/\r\n\r\n", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
-        sprintf(value, "%s://%s/", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
+        value = sdscatfmt(sdsempty(), "%s://%s/", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
     }
 
     add_custom_header("Location", value, headers);
 }
 
-// TODO: this is only a silly test.. we should think in another way to store the session files. GDBM maybe?
+// @todo this is only a silly test.. we should think in another way to store the session files. GDBM maybe?
 static void read_session_file(cwf_session *session, FILE *session_file) {
     char *line = NULL;
     size_t len = 0;
@@ -858,7 +760,7 @@ static int sqlite_callback_for_session(void *data, int num_results, char **colum
 static void execute_query_for_session(const char *query, sqlite3 *db, record **data) {
     char *errmsg;
 
-    // TODO: We will have to free all records
+    // @todo We will have to free all records
     if(*data) {
         arrfree(*data);
         *data = NULL;
@@ -868,17 +770,17 @@ static void execute_query_for_session(const char *query, sqlite3 *db, record **d
 
     int rc = sqlite3_exec(db, query, sqlite_callback_for_session, (void *)data, &errmsg);
 
-    // TODO: handle error
+    // @todo handle error
     if(rc != SQLITE_OK) {
     }
 }
 
 // https://alexwebdevelop.com/php-sessions-explained/
-// TODO: save the session values in main.c?
+// @todo save the session values in main.c?
 // This function has to be called after adding and writing any headers
-// TODO: maybe the session can be inside the request?
+// @todo maybe the session can be inside the request?
 void cwf_session_start(cwf_session **session, http_header *headers) {
-    // TODO: section needs to have a lock to access the session file. I thing we will need a semaphore here to handle
+    // @todo section needs to have a lock to access the session file. I thing we will need a semaphore here to handle
     // simultaneos connections. If a section is readonly we dont need to bother with the lockfile
     if(*session == NULL) {
         *session = calloc(1, sizeof(session));
@@ -891,24 +793,24 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
             sh_new_arena((*session)->data);
             shdefault((*session)->data, NULL);
 
-            // TODO: let the user define a expire time and the other cookie settings
+            // @todo let the user define a expire time and the other cookie settings
             (*session)->cookie->expires = 12 * 30 * 24 * 60 * 60;
             (*session)->cookie->domain = getenv("SERVER_NAME");
             add_cookie_to_header((*session)->cookie, headers);
 
             char session_file_name[128];
-            // TODO: use c11 to avoid insecure string functions
+            // @todo use c11 to avoid insecure string functions
             sprintf(session_file_name, "/var/www/cwf/session_%s", sid);
             (*session)->db_filename = strdup(session_file_name);
 
             free(sid);
 
-            // We only need to create a new file for the session
+            //@todo We only need to create a new file for the session
             sqlite3 *session_file;
             int rc =
                 sqlite3_open_v2(session_file_name, &session_file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, NULL);
 
-            // TODO: handle session errors
+            // @todo handle session errors
             if(rc != SQLITE_OK) {
                 const char *err = sqlite3_errmsg(session_file);
                 fprintf(stderr, "%s\n", err);
@@ -920,14 +822,14 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
             char *error;
             rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
-            // TODO: handle session errors
+            // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
             }
 
             rc = sqlite3_exec(session_file, sql2, NULL, NULL, &error);
 
-            // TODO: handle session errors
+            // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
             }
@@ -936,7 +838,7 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
 
         } else {
             char session_file_name[1024];
-            // TODO: use c11 to avoid insecure string functions
+            // @todo use c11 to avoid insecure string functions
             sprintf(session_file_name, "/var/www/cwf/session_%s", (*session)->cookie->value);
             (*session)->db_filename = strdup(session_file_name);
 
@@ -944,7 +846,7 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
             sqlite3 *session_file;
             int rc = sqlite3_open((*session)->db_filename, &session_file);
 
-            // TODO: handle session errors
+            // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
             }
@@ -962,7 +864,7 @@ void cwf_session_destroy(cwf_session **session, http_header *headers) {
 	} else {
 		char session_file_name[1024];
 	
-		// TODO: use c11 to avoid insecure string functions
+		// @todo use c11 to avoid insecure string functions
 		sprintf(session_file_name, "/var/www/cwf/session_%s", (*session)->cookie->value);
 	
 		//shfree((*session)->data);
@@ -986,24 +888,24 @@ void cwf_save_session(cwf_session *session) {
     sqlite3 *session_file;
     int rc = sqlite3_open(session->db_filename, &session_file);
 
-    // TODO: handle session errors
+    // @todo handle session errors
     if(rc != SQLITE_OK) {
         sqlite3_close(session_file);
     }
 
     int len = shlen(session->data);
 
-    // TODO: lets change this to use sds...
+    //@todo lets change this to use sds...
     char sql[1024];
 
     for(int i = 0; i < len; i++) {
-        // TODO: create a single query to avoid this loop
+        //@todo create a single query to avoid this loop
         sprintf(sql, "REPLACE INTO session_data (key, value) VALUES('%s', '%s')", session->data[i].key, session->data[i].value);
 
 		char *error; 
 		rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
-        // TODO: handle session errors
+        //@todo handle session errors
         if(rc != SQLITE_OK) {
 			printf("%s\n", error);
             sqlite3_close(session_file);

@@ -64,4 +64,8 @@ void CGI_prefork_server(const char *host, int port, const char *pidfile,
     int maxproc, int minidle, int maxidle, int maxreq,
     void (*callback)(void));
 
+//helper functions
+int CGI_hex(int digit);
+char * CGI_scanspaces(char *p);
+char * CGI_scanattr(char *p, char *attr[2]);
 #endif

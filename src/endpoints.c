@@ -6,8 +6,6 @@
 #include "3dparty/ctemplate-1.0/ctemplate.h"
 #include <time.h> 
 
-
-//TODO: we neeed to figure out the headers situation
 ENDPOINT(login) {
 
 	TMPL_varlist *varlist = 0;
@@ -65,24 +63,20 @@ ENDPOINT(logout) {
 }
 
 ENDPOINT(cgi_info) {
-
-
 	header("Content-Type", "text/plain");
 	sds response = sdsempty();
 
-	response = sdscatprintf(response, "SQLITE VERSION: %s\r\n\r\n", sqlite3_libversion());
+	response = sdscatfmt(response, "SQLITE VERSION: %s\r\n\r\n", sqlite3_libversion());
 
 	cwf_request *request = cwf_vars->request;
 
-	
-
     for(int i = 0; i < request->server_data_len; i++) {
-		response = sdscatprintf(response, "%s %s\n", request->server_data[i].key, request->server_data[i].value);
+		response = sdscatfmt(response, "%s %s\n", request->server_data[i].key, request->server_data[i].value);
     }
 
     if(strcmp(request->data_type, "urlencoded") == 0) {
         for(int i = 0; i < request->data_len; i++) {
-			response = sdscatprintf(response, "%s %s\n", request->urlencoded_data[i].key, request->urlencoded_data[i].value);
+			response = sdscatfmt(response, "%s %s\n", request->urlencoded_data[i].key, request->urlencoded_data[i].value);
         }
     }
 
@@ -96,7 +90,7 @@ void modify_value(char *name, char *value) {
 	now = time(NULL);  
 	double seconds;
 	int days;
-	char tmp[10];
+	char tmp[64];
 
 	if(strcmp(name, "date") == 0) {
 		time_t post_date = strtol(value, NULL, 10); 
@@ -109,7 +103,6 @@ void modify_value(char *name, char *value) {
 
 }
 
-//TODO: remove html tags https://stackoverflow.com/questions/9444200/c-strip-html-between
 ENDPOINT(site_index) {
 
     cfw_database *database = open_database("/var/www/cwf/blog.sqlite");
@@ -121,7 +114,7 @@ ENDPOINT(site_index) {
 		generate_default_404_header();
 
         if(cwf_vars->print_debug_info) {
-            response = sdscatprintf(response, "Database error: %s", database->error);
+            response = sdscatfmt(response, "Database error: %s", database->error);
         }
 
         return response;
@@ -133,7 +126,7 @@ ENDPOINT(site_index) {
         generate_default_404_header();
 
         if(cwf_vars->print_debug_info) {
-            response = sdscatprintf(response, "Database error: %s", database->error);
+            response = sdscatfmt(response, "Database error: %s", database->error);
         }
 
         return response;
@@ -142,7 +135,7 @@ ENDPOINT(site_index) {
 	TMPL_varlist *varlist = 0;
     varlist = db_records_to_loop(varlist, database, "loop", modify_value);
 	
-	//TODO: add a function to do this
+	//@todo add a function to do this
 	TMPL_varlist *loop_varlist = TMPL_get_loop_varlist(TMPL_get_loop(varlist));
 	
 	for(int i = 0; i < database->num_records; i++) {
@@ -182,12 +175,12 @@ ENDPOINT(post_detail) {
 		generate_default_404_header();
 
 		if(cwf_vars->print_debug_info) {
-			response = sdscatprintf(response, "Database error: %s", database->error);
+			response = sdscatfmt(response, "Database error: %s", database->error);
 		}
 		return response;
 	}
 
-	//TODO: prepared statement here
+	//@todo use a prepared statement here
 	char query[1024];
 
 	int id = strtol(GET("id"), NULL, 10);
@@ -200,7 +193,7 @@ ENDPOINT(post_detail) {
 		generate_default_404_header();
 
 		if(cwf_vars->print_debug_info) {
-			response = sdscatprintf(response, "Database error: %s", database->error);
+			response = sdscatfmt(response, "Database error: %s", database->error);
 		}
 
 		return response;

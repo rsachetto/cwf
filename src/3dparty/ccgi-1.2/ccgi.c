@@ -157,8 +157,8 @@
 	 * or returns -1 if "digit" is not a hexadecimal digit.
 	 */
 
-	static int
-	hex(int digit) {
+	int
+	CGI_hex(int digit) {
 		switch(digit) {
 
 		case '0': case '1': case '2': case '3': case '4':
@@ -224,8 +224,8 @@
 
 	/* scanspaces() scans over spaces and tabs in a string */
 
-	static char *
-	scanspaces(char *p) {
+	char *
+	CGI_scanspaces(char *p) {
 		while (*p == ' ' || *p == '\t') {
 			p++;
 		}
@@ -233,18 +233,17 @@
 	}
 
 	/*
-	 * scanattr() scans for an attribute such as name="value" or
+	 * CGI_scanattr() scans for an attribute such as name="value" or
 	 * name=value; saving the attribute name in attr[0] and saving
 	 * the attribute value in attr[1].  If successful, we return a
 	 * pointer to where the scan ended, otherwise we return null.
 	 * The input string is modified.
 	 */
 
-	static char *
-	scanattr(char *p, char *attr[2]) {
+	char * CGI_scanattr(char *p, char *attr[2]) {
 		int quote = 0;
 
-		attr[0] = p = scanspaces(p);
+		attr[0] = p = CGI_scanspaces(p);
 		while (*p != '=' && *p != 0) {
 			p++;
 		}
@@ -305,7 +304,7 @@
 			return 0;
 		}
 		*p++ = 0;
-		header[1] = p = scanspaces(p);
+		header[1] = p = CGI_scanspaces(p);
 		while (*p != ';' && *p != '\r' && *p != '\n' && *p != 0) {
 			p++;
 		}
@@ -443,7 +442,7 @@
 			return v;
 		}
 		bbuf = savestr(bbuf, ctype + len);
-		if (scanattr(bbuf->str, token) == 0 ||
+		if (CGI_scanattr(bbuf->str, token) == 0 ||
 			strcasecmp(token[0], "boundary") != 0)
 		{
 			goto cleanup;
@@ -482,7 +481,7 @@
 
 				/* Content-Disposition: has field name and file name */
 
-				while ((p = scanattr(p, token)) != 0) {
+				while ((p = CGI_scanattr(p, token)) != 0) {
 					if (name == 0 &&
 						strcasecmp(token[0], "name") == 0)
 					{
@@ -599,8 +598,8 @@
 				continue;
 
 			case '%':
-				if ((L = hex(p[i + 1])) >= 0 &&
-					(R = hex(p[i + 2])) >= 0)
+				if ((L = CGI_hex(p[i + 1])) >= 0 &&
+					(R = CGI_hex(p[i + 2])) >= 0)
 				{
 					out[k++] = (L << 4) + R;
 					i += 2;
@@ -831,8 +830,8 @@
 				continue;
 
 			case '%':
-				if ((L = hex(query[i + 1])) >= 0 &&
-					(R = hex(query[i + 2])) >= 0)
+				if ((L = CGI_hex(query[i + 1])) >= 0 &&
+					(R = CGI_hex(query[i + 2])) >= 0)
 				{
 					buf[k++] = (L << 4) + R;
 					i += 2;
@@ -862,7 +861,7 @@
 		}
 		buf = (char *) mymalloc(strlen(env) + 1);
 		p = strcpy(buf, env);
-		while ((p = scanattr(p, cookie)) != 0) {
+		while ((p = CGI_scanattr(p, cookie)) != 0) {
 			v = CGI_add_var(v, cookie[0], cookie[1]);
 		}
 		free(buf);
@@ -1291,7 +1290,7 @@ CGI_decode_hex(const char *p, int *len) {
     }
     out = mymalloc(n / 2 + 1);
     for (i = k = 0; i < n; i += 2) {
-        if ((L = hex(p[i])) >= 0 && (R = hex(p[i + 1])) >= 0) {
+        if ((L = CGI_hex(p[i])) >= 0 && (R = CGI_hex(p[i + 1])) >= 0) {
             out[k++] = (L << 4) + R;
         }
         else {
