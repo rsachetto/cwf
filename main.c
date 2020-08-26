@@ -8,17 +8,32 @@
 #include "src/ini_parse.h"
 
 //@todo: create a ini file to configure the site options like the debug_seter and the endpoints file
-//@todo add CSRF protection - https://owasp.org/www-community/attacks/csrf https://codefellows.github.io/sea-python-401d4/lectures/pyramid_day6_csrf.html
+//@todo add CSRF protection - https://owasp.org/www-community/attacks/csrf
+// https://codefellows.github.io/sea-python-401d4/lectures/pyramid_day6_csrf.html
 #define ENDPOINTS_FILE "/var/www/cwf/endpoints.ini"
 
 #ifdef GDB_DEBUG
-void wait_for_gdb_to_attach() {
+static void wait_for_gdb_to_attach() {
     int is_waiting = 1;
     while(is_waiting) {
         sleep(1);  // sleep for 1 second
     }
 }
 #endif
+
+static void simple_404_page(cwf_vars *cwf_vars, char *format, ...) {
+    generate_default_404_header();
+    write_http_headers(cwf_vars->headers);
+
+    if(cwf_vars->print_debug_info) {
+        va_list args;
+        va_start(args, format);
+        vfprintf(stdout, format, args);
+        va_end(args);
+    }
+
+    return;
+}
 
 int main(int argc, char **argv) {
 #ifdef GDB_DEBUG
@@ -33,8 +48,7 @@ int main(int argc, char **argv) {
 
     void *handle = dlopen(ENDPOINT_LIB_PATH, RTLD_LAZY);
     if(!handle) {
-        generate_default_404_header();
-        if(cwf_vars->print_debug_info) fprintf(stdout, "%s\n", dlerror());
+        simple_404_page(cwf_vars, "%s\n", dlerror());
         return 0;
     }
 
@@ -45,13 +59,11 @@ int main(int argc, char **argv) {
     endpoint_config_item *endpoint_configs = new_endpoint_config_hash();
 
     if(ini_parse(config_file, parse_endpoint_configuration, (void *)&endpoint_configs) < 0) {
-        generate_default_404_header();
-        if(cwf_vars->print_debug_info) fprintf(stdout, "Error: Can't load the config file %s\n", config_file);
         return 0;
     }
 
-    endpoint_config *endpoint_config = get_endpoint_config(SERVER("REQUEST_URI"),
-                                                           SERVER("QUERY_STRING"), endpoint_configs);
+    endpoint_config *endpoint_config =
+        get_endpoint_config(SERVER("REQUEST_URI"), SERVER("QUERY_STRING"), endpoint_configs);
 
     char *endpoint_name = NULL;
 
@@ -62,18 +74,14 @@ int main(int argc, char **argv) {
         char *error = dlerror();
 
         if(error != NULL) {
-            generate_default_404_header();
-            if(cwf_vars->print_debug_info)
-                fprintf(stdout, "\n%s function not found in the provided in library %s. Error from dlsym %s\n",
-                        endpoint_name, ENDPOINT_LIB_PATH, error);
+            simple_404_page(cwf_vars, "\n%s function not found in the provided in library %s. Error from dlsym %s\n",
+                            endpoint_name, ENDPOINT_LIB_PATH, error);
             return 0;
         }
     } else {
-        generate_default_404_header();
-        if(cwf_vars->print_debug_info)
-            fprintf(stdout,
-                    "\nNo configured endpoint for the provided URL %s<br/> Check your endpoints config file (%s)",
-                    SERVER("REQUEST_URI"), ENDPOINTS_FILE);
+        simple_404_page(cwf_vars,
+                        "No configured endpoint for the provided URL %s<br/> Check your endpoints config file (%s)",
+                        SERVER("REQUEST_URI"), ENDPOINTS_FILE);
         return 0;
     }
 
@@ -83,21 +91,18 @@ int main(int argc, char **argv) {
         } else {
             //@todo: include an error message on the endpoint_config
             generate_default_404_header();
-
-            if(cwf_vars->print_debug_info)
-                fprintf(
-                    stdout,
-                    "<h1>Error parsing parameters for endpoint [%s] with URL %s</h1><h2 style=\"color:red;\">%s</h2> ",
-                    endpoint_name, SERVER("REQUEST_URI"), endpoint_config->error);
+            simple_404_page(
+                cwf_vars,
+                "<h1>Error parsing parameters for endpoint [%s] with URL %s</h1><h2 style=\"color:red;\">%s</h2> ",
+                endpoint_name, SERVER("REQUEST_URI"), endpoint_config->error);
             return 0;
         }
     }
 
-	//Maybe we can put response inside the cwf_vars
+    // Maybe we can put response inside the cwf_vars
     sds reponse = endpoint_function(cwf_vars, NULL);
-	write_http_headers(cwf_vars->headers);
-	if(reponse)
-		fprintf(stdout, "%s", reponse);
+    write_http_headers(cwf_vars->headers);
+    if(reponse) fprintf(stdout, "%s", reponse);
     cwf_save_session(cwf_vars->session);
     //@todo maybe we will also need to release the file locks if the section is not readonly
     return 0;

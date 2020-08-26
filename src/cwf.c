@@ -775,10 +775,6 @@ static void execute_query_for_session(const char *query, sqlite3 *db, record **d
     }
 }
 
-// https://alexwebdevelop.com/php-sessions-explained/
-// @todo save the session values in main.c?
-// This function has to be called after adding and writing any headers
-// @todo maybe the session can be inside the request?
 void cwf_session_start(cwf_session **session, http_header *headers) {
     // @todo section needs to have a lock to access the session file. I thing we will need a semaphore here to handle
     // simultaneos connections. If a section is readonly we dont need to bother with the lockfile
@@ -818,20 +814,24 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
             }
 
             char *sql = "DROP TABLE IF EXISTS session_data;";
-            char *sql2 = "CREATE TABLE session_data (key TEXT PRIMARY KEY, value TEXT);";
             char *error;
-            rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
+           
+		   	rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
             // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
+				sqlite3_free(error);
             }
+            
+			char *sql2 = "CREATE TABLE session_data (key TEXT PRIMARY KEY, value TEXT);";
 
             rc = sqlite3_exec(session_file, sql2, NULL, NULL, &error);
 
             // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
+				sqlite3_free(error);
             }
 
             sqlite3_close(session_file);
@@ -846,13 +846,23 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
             sqlite3 *session_file;
             int rc = sqlite3_open((*session)->db_filename, &session_file);
 
-            // @todo handle session errors
+			 // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
             }
 
-            char *sql = "SELECT * from session_data;";
-            execute_query_for_session(sql, session_file, &(*session)->data);
+			char *error;
+			char *sql = "CREATE TABLE IF NOT EXISTS session_data (key TEXT PRIMARY KEY, value TEXT);";
+            rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
+
+            // @todo handle session errors
+            if(rc != SQLITE_OK) {
+                sqlite3_close(session_file);
+				sqlite3_free(error);
+            }
+           
+            char *sql2 = "SELECT * from session_data;";
+            execute_query_for_session(sql2, session_file, &(*session)->data);
             sqlite3_close(session_file);
         }
     }
@@ -869,7 +879,7 @@ void cwf_session_destroy(cwf_session **session, http_header *headers) {
 	
 		//shfree((*session)->data);
 		
-		(*session)->cookie->expires = -3600;
+		(*session)->cookie->expires = -3600*24;
 		add_cookie_to_header((*session)->cookie, headers);
 	
 		free_cookie((*session)->cookie);
@@ -878,6 +888,8 @@ void cwf_session_destroy(cwf_session **session, http_header *headers) {
 
 		free(*session);
 		*session = NULL;
+		remove (session_file_name);
+
     }
 }
 
