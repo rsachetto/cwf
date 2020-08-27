@@ -7,6 +7,13 @@
 #include "src/cwf.h"
 #include "src/ini_parse.h"
 
+//@todo enable support for multiple applications in a single site.
+//this can be achieved by creating a site.ini file that configure the endpoints
+//maybe we will need to search in all the shared libraries to a certain endpoint
+
+//@todo create a development server. We will need to fork a process and replace its stdin with the 
+//parent stdout. And the parent stdin with the child stdout.
+
 //@todo: create a ini file to configure the site options like the debug_server, the endpoints file, the endpoints
 // library and the database file
 //@todo add CSRF protection - https://owasp.org/www-community/attacks/csrf
