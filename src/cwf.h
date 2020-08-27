@@ -7,8 +7,8 @@
 #include "3dparty/ccgi-1.2/ccgi.h"
 #include "3dparty/ctemplate-1.0/ctemplate.h"
 #include "3dparty/json/json.h"
-#include "3dparty/sqlite/sqlite3.h"
 #include "3dparty/sds/sds.h"
+#include "3dparty/sqlite/sqlite3.h"
 
 #define IS_REQ_GET(request) strcmp(request->method, "GET") == 0
 #define IS_REQ_POST(request) strcmp(request->method, "POST") == 0
@@ -16,13 +16,15 @@
 #define IS_GET() IS_REQ_GET(cwf_vars->request)
 #define IS_POST() IS_REQ_POST(cwf_vars->request)
 
-
 #define STRINGS_MATCH(a, b) strcmp((a), (b)) == 0
 #define STRINGS_MATCH_NO_CASE_N(a, b, n) strncasecmp((a), (b), (n)) == 0
+
+#define ENDSWITH(s, c) (s)[strlen((s)) - 1] == (c)
 
 typedef enum { INT, STRING, FLOAT, INVALID } parameter_type;
 
 typedef char *char_array;
+typedef char **string_array;
 
 typedef struct {
     char *name;
@@ -69,15 +71,20 @@ typedef record *http_header;
 
 typedef struct request_item_t {
     char *key;
-    char *value;
+    string_array value;
 } request_item;
+
+typedef struct server_data_t {
+    char *key;
+    char *value;
+} server_data;
 
 typedef struct cwf_request_t {
     char *method;
     char *data_type;
     int server_data_len;
     int data_len;
-    request_item *server_data;
+    struct server_data_t *server_data;
     union {
         json_value *json_data;
         request_item *urlencoded_data;
@@ -93,7 +100,7 @@ typedef struct cwf_session_t {
 typedef struct cwf_vars_t {
     cwf_request *request;
     cwf_session *session;
-	http_header headers;
+    http_header headers;
     bool print_debug_info;
 } cwf_vars;
 
@@ -116,11 +123,18 @@ void write_http_headers(http_header header);
 #define SERVER(key) cwf_server_vars(cwf_vars->request, (key))
 char *cwf_server_vars(cwf_request *req, char *key);
 
-#define GET(key) cwf_get_vars(cwf_vars->request, (key))
-char *cwf_get_vars(cwf_request *req, char *key);
+#define GET(key) cwf_get_vars(cwf_vars->request, (key)) ? cwf_get_vars(cwf_vars->request, (key))[0] : NULL
+#define GET_ARRAY(key) cwf_get_vars(cwf_vars->request, (key))
+string_array cwf_get_vars(cwf_request *req, char *key);
 
-#define POST(key) cwf_post_vars(cwf_vars->request, (key))
-char *cwf_post_vars(cwf_request *req, char *key);
+#define POST(key) cwf_post_vars(cwf_vars->request, (key)) ? cwf_post_vars(cwf_vars->request, (key))[0] : NULL
+#define POST_ARRAY(key) cwf_post_vars(cwf_vars->request, (key))
+string_array cwf_post_vars(cwf_request *req, char *key);
+
+#define DUMP_REQUEST_VARS()        \
+    generate_default_404_header(); \
+    return cwf_dump_request_vars(cwf_vars->request)
+sds cwf_dump_request_vars(cwf_request *req);
 
 #define SESSION_GET(key) cwf_session_get(cwf_vars->session, (key))
 char *cwf_session_get(cwf_session *session, const char *key);
@@ -155,7 +169,9 @@ char_array strip_html_tags(const char *buf);
 #define generate_default_404_header() cwf_generate_default_404_header(&(cwf_vars->headers))
 void cwf_generate_default_404_header(http_header *headers);
 
-#define redirect(url) cwf_redirect((url), &(cwf_vars->headers)); return NULL;
+#define redirect(url)                          \
+    cwf_redirect((url), &(cwf_vars->headers)); \
+    return NULL;
 void cwf_redirect(const char *url, http_header *headers);
 
 #define session_start() cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers))
@@ -165,4 +181,8 @@ void cwf_session_start(cwf_session **session, http_header *headers);
 void cwf_session_destroy(cwf_session **session, http_header *headers);
 
 void cwf_save_session(cwf_session *session);
+
+#define generate_simple_404(format, ...) simple_404_page(cwf_vars, format, __VA_ARGS__)
+sds simple_404_page(cwf_vars *cwf_vars, char *format, ...);
+
 #endif /* __CWF_H */

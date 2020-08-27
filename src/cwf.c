@@ -10,8 +10,6 @@
 #include "3dparty/stb/stb_ds.h"
 #include "cwf.h"
 
-#define ENDSWITH(s, c) (s)[strlen((s)) - 1] == (c)
-
 static void decode_query(request_item **v, const char *query) {
     char *buf;
     const char *name, *value;
@@ -45,7 +43,9 @@ static void decode_query(request_item **v, const char *query) {
                     value = buf + k;
                 }
                 if(name != 0) {
-                    shput(*v, strdup(name), strdup(value));
+                    string_array values = shget(*v, name);
+                    arrput(values, strdup(value));
+                    shput(*v, strdup(name), values);
                 }
                 k = 0;
                 name = value = 0;
@@ -132,12 +132,12 @@ cwf_cookie *new_cookie(char *name, char *value) {
 }
 
 void free_cookie(cwf_cookie *cookie) {
-	if(!cookie) return;
-	free(cookie->name);
-	free(cookie->value);
-	free(cookie->path);
-	free(cookie->domain);
-	free(cookie->same_site);
+    if(!cookie) return;
+    free(cookie->name);
+    free(cookie->value);
+    free(cookie->path);
+    free(cookie->domain);
+    free(cookie->same_site);
 }
 
 cwf_cookie *get_cookie() {
@@ -201,8 +201,7 @@ http_header new_empty_header() {
 }
 
 void add_custom_header(const char *name, const char *value, http_header *header) {
-	if(value)
-	    shput(*header, name, strdup(value));
+    if(value) shput(*header, name, strdup(value));
 }
 
 static inline void append_string(char_array *string, const char *to_append) {
@@ -215,50 +214,50 @@ static inline void append_string(char_array *string, const char *to_append) {
 
 //@todo this can be much faster if we do memcpy instead of fors
 void add_cookie_to_header(cwf_cookie *c, http_header *header) {
-	if(!c || !c->name || !c->value) return;
+    if(!c || !c->name || !c->value) return;
 
-	int cookie_str_size = strlen(c->name);
-	cookie_str_size += strlen(c->value);
-	cookie_str_size += 2;  // = and ;
+    int cookie_str_size = strlen(c->name);
+    cookie_str_size += strlen(c->value);
+    cookie_str_size += 2;  // = and ;
 
-	sds cookie_str = sdsnew(c->name);
+    sds cookie_str = sdsnew(c->name);
 
-	cookie_str = sdscatfmt(cookie_str, "=%s;", c->value);
+    cookie_str = sdscatfmt(cookie_str, "=%s;", c->value);
 
-	char buf[64];
-	time_t cookie_date = c->expires + time(NULL);
-	struct tm tm = *gmtime(&cookie_date);
-	strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    char buf[64];
+    time_t cookie_date = c->expires + time(NULL);
+    struct tm tm = *gmtime(&cookie_date);
+    strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
 
-	cookie_str = sdscatfmt(cookie_str, "Expires=%s;", buf);
+    cookie_str = sdscatfmt(cookie_str, "Expires=%s;", buf);
 
-	if(c->max_age > 0) {
-		cookie_str = sdscatfmt(cookie_str, "Max-Age=%i;", c->max_age);
-	}
+    if(c->max_age > 0) {
+        cookie_str = sdscatfmt(cookie_str, "Max-Age=%i;", c->max_age);
+    }
 
-	if(c->domain) {
-		cookie_str = sdscatfmt(cookie_str, "Domain=%s;", c->domain);
-	}
+    if(c->domain) {
+        cookie_str = sdscatfmt(cookie_str, "Domain=%s;", c->domain);
+    }
 
-	if(c->path) {
-		cookie_str = sdscatfmt(cookie_str, "Path=%s;", c->path);
-	}
+    if(c->path) {
+        cookie_str = sdscatfmt(cookie_str, "Path=%s;", c->path);
+    }
 
-	if(c->same_site) {
-		cookie_str = sdscatfmt(cookie_str, "SameSite;");
-	}
+    if(c->same_site) {
+        cookie_str = sdscatfmt(cookie_str, "SameSite;");
+    }
 
-	if(c->secure) {
-		cookie_str = sdscatfmt(cookie_str, "Secure;");
-	}
+    if(c->secure) {
+        cookie_str = sdscatfmt(cookie_str, "Secure;");
+    }
 
-	if(c->http_only) {
-		cookie_str = sdscatfmt(cookie_str, "HttpOnly;");
-	}
+    if(c->http_only) {
+        cookie_str = sdscatfmt(cookie_str, "HttpOnly;");
+    }
 
-	add_custom_header("Set-Cookie", cookie_str, header);
+    add_custom_header("Set-Cookie", cookie_str, header);
 
-	sdsfree(cookie_str);
+    sdsfree(cookie_str);
 }
 endpoint_config *new_endpoint_config() {
     endpoint_config *config = calloc(1, sizeof(endpoint_config));
@@ -404,7 +403,9 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
 
 void add_params_to_request(cwf_request *req, url_params *params) {
     for(int i = 0; i < arrlen(params); i++) {
-        shput(req->urlencoded_data, params[i].name, strdup(params[i].value));
+        string_array tmp = shget(req->urlencoded_data, params[i].name);
+        arrput(tmp, strdup(params[i].value));
+        shput(req->urlencoded_data, params[i].name, tmp);
     }
 }
 
@@ -499,7 +500,7 @@ char *cwf_server_vars(cwf_request *req, char *key) {
     return shget(req->server_data, key);
 }
 
-char *cwf_get_vars(cwf_request *req, char *key) {
+string_array cwf_get_vars(cwf_request *req, char *key) {
     if(IS_REQ_GET(req)) {
         return shget(req->urlencoded_data, key);
     }
@@ -507,25 +508,35 @@ char *cwf_get_vars(cwf_request *req, char *key) {
     return NULL;
 }
 
-char *cwf_post_vars(cwf_request *req, char *key) {
+string_array cwf_post_vars(cwf_request *req, char *key) {
     if(IS_REQ_POST(req)) {
         return shget(req->urlencoded_data, key);
     }
     return NULL;
 }
 
-sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_header *headers) {
+sds cwf_dump_request_vars(cwf_request *req) {
+    sds response = sdsempty();
+    for(int i = 0; i < shlen(req->urlencoded_data); i++) {
+        string_array vars = req->urlencoded_data[i].value;
+        for(int j = 0; j < arrlen(vars); j++) {
+            response = sdscatfmt(response, "Key: %s, Value: %s<br/>", req->urlencoded_data[i].key, vars[j]);
+        }
+    }
 
+    return response;
+}
+
+sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_header *headers) {
     add_custom_header("Content-type", "text/html", headers);
 
     TMPL_fmtlist *fmtlist;
     fmtlist = TMPL_add_fmt(0, "entity", TMPL_encode_entity);
     TMPL_add_fmt(fmtlist, "url", TMPL_encode_url);
 
-	sds template_str = sdsempty();
+    sds template_str = sdsempty();
 
     int ret = TMPL_write(template_path, 0, fmtlist, varlist, &template_str, NULL, stderr) != 0;
-
 
     TMPL_free_fmtlist(fmtlist);
     TMPL_free_varlist(varlist);
@@ -558,7 +569,11 @@ static int sqlite_callback(void *cfw_db, int num_results, char **column_values, 
 
         for(int i = 0; i < num_results; i++) {
             if(column_names[i]) {
-                shput(line, strdup(column_names[i]), strdup(column_values[i]));
+                if(column_values[i]) {
+                    shput(line, strdup(column_names[i]), strdup(column_values[i]));
+                } else {
+                    shput(line, strdup(column_names[i]), NULL);
+                }
                 num_records++;
             }
         }
@@ -593,11 +608,14 @@ int get_num_columns(record *r) {
     return shlen(r);
 }
 
-
 TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value_fn *modify, cwf_request *req) {
     for(int i = 0; i < shlen(req->urlencoded_data); i++) {
+        string_array tmp = req->urlencoded_data[i].value;
+
         char *name = strdup(req->urlencoded_data[i].key);
-        char *value = strdup(req->urlencoded_data[i].value);
+        char *value = NULL;
+
+        if(tmp) value = tmp[0];
 
         if(modify) {
             modify(name, value);
@@ -613,7 +631,11 @@ TMPL_varlist *db_record_to_varlist(TMPL_varlist *varlist, cfw_database *database
     for(int i = 0; i < database->num_records; i++) {
         for(int j = 0; j < get_num_columns(database->records[i]); j++) {
             char *name = strdup(database->records[i][j].key);
-            char *value = strdup(database->records[i][j].value);
+            char *value = NULL;
+
+            if(database->records[i][j].value) {
+                value = strdup(database->records[i][j].value);
+            }
 
             if(modify) {
                 modify(name, value);
@@ -635,7 +657,9 @@ TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, 
 
         for(int j = 0; j < get_num_columns(database->records[i]); j++) {
             char *name = strdup(database->records[i][j].key);
-            char *value = strdup(database->records[i][j].value);
+            char *value = NULL;
+
+            if(database->records[i][j].value) value = strdup(database->records[i][j].value);
 
             if(modify) {
                 modify(name, value);
@@ -693,18 +717,17 @@ static char *generate_session_id() {
 
     char *b64 = CGI_encode_base64(sha, 32);
 
-	int len = strlen(b64);
+    int len = strlen(b64);
 
-	for(int i = 0; i < len; i++) {
-		if(b64[i] == '/') b64[i] = '_';
-	}
+    for(int i = 0; i < len; i++) {
+        if(b64[i] == '/') b64[i] = '_';
+    }
 
     return (b64);
 }
 
 void cwf_redirect(const char *url, http_header *headers) {
-    
-	char *tmp = (char *)url;
+    char *tmp = (char *)url;
 
     sds value = NULL;
 
@@ -713,7 +736,7 @@ void cwf_redirect(const char *url, http_header *headers) {
             tmp = tmp + 1;
         }
 
-		value = sdsnew(tmp);
+        value = sdsnew(tmp);
 
     } else if(strlen(url) == 1 && *url == '/') {
         value = sdscatfmt(sdsempty(), "%s://%s/", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
@@ -815,23 +838,23 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
 
             char *sql = "DROP TABLE IF EXISTS session_data;";
             char *error;
-           
-		   	rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
+
+            rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
             // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
-				sqlite3_free(error);
+                sqlite3_free(error);
             }
-            
-			char *sql2 = "CREATE TABLE session_data (key TEXT PRIMARY KEY, value TEXT);";
+
+            char *sql2 = "CREATE TABLE session_data (key TEXT PRIMARY KEY, value TEXT);";
 
             rc = sqlite3_exec(session_file, sql2, NULL, NULL, &error);
 
             // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
-				sqlite3_free(error);
+                sqlite3_free(error);
             }
 
             sqlite3_close(session_file);
@@ -846,21 +869,21 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
             sqlite3 *session_file;
             int rc = sqlite3_open((*session)->db_filename, &session_file);
 
-			 // @todo handle session errors
+            // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
             }
 
-			char *error;
-			char *sql = "CREATE TABLE IF NOT EXISTS session_data (key TEXT PRIMARY KEY, value TEXT);";
+            char *error;
+            char *sql = "CREATE TABLE IF NOT EXISTS session_data (key TEXT PRIMARY KEY, value TEXT);";
             rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
             // @todo handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
-				sqlite3_free(error);
+                sqlite3_free(error);
             }
-           
+
             char *sql2 = "SELECT * from session_data;";
             execute_query_for_session(sql2, session_file, &(*session)->data);
             sqlite3_close(session_file);
@@ -869,30 +892,28 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
 }
 
 void cwf_session_destroy(cwf_session **session, http_header *headers) {
-	if(*session == NULL) {
-		return;
-	} else {
-		char session_file_name[1024];
-	
-		// @todo use c11 to avoid insecure string functions
-		sprintf(session_file_name, "/var/www/cwf/session_%s", (*session)->cookie->value);
-	
-		//shfree((*session)->data);
-		
-		(*session)->cookie->expires = -3600*24;
-		add_cookie_to_header((*session)->cookie, headers);
-	
-		free_cookie((*session)->cookie);
+    if(*session == NULL) {
+        return;
+    } else {
+        char session_file_name[1024];
 
-		free((*session)->db_filename);
+        // @todo use c11 to avoid insecure string functions
+        sprintf(session_file_name, "/var/www/cwf/session_%s", (*session)->cookie->value);
 
-		free(*session);
-		*session = NULL;
-		remove (session_file_name);
+        // shfree((*session)->data);
 
+        (*session)->cookie->expires = -3600 * 24;
+        add_cookie_to_header((*session)->cookie, headers);
+
+        free_cookie((*session)->cookie);
+
+        free((*session)->db_filename);
+
+        free(*session);
+        *session = NULL;
+        remove(session_file_name);
     }
 }
-
 
 void cwf_save_session(cwf_session *session) {
     if(!session) return;
@@ -912,14 +933,15 @@ void cwf_save_session(cwf_session *session) {
 
     for(int i = 0; i < len; i++) {
         //@todo create a single query to avoid this loop
-        sprintf(sql, "REPLACE INTO session_data (key, value) VALUES('%s', '%s')", session->data[i].key, session->data[i].value);
+        sprintf(sql, "REPLACE INTO session_data (key, value) VALUES('%s', '%s')", session->data[i].key,
+                session->data[i].value);
 
-		char *error; 
-		rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
+        char *error;
+        rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
         //@todo handle session errors
         if(rc != SQLITE_OK) {
-			printf("%s\n", error);
+            printf("%s\n", error);
             sqlite3_close(session_file);
             break;
         }
@@ -935,3 +957,18 @@ char *cwf_session_get(cwf_session *session, const char *key) {
 char *cwf_session_put(cwf_session *session, const char *key, const char *value) {
     return shput(session->data, key, strdup(value));
 }
+
+sds simple_404_page(cwf_vars *cwf_vars, char *format, ...) {
+    generate_default_404_header();
+
+    if(cwf_vars->print_debug_info) {
+        va_list args;
+        va_start(args, format);
+        sds result = sdscatvprintf(sdsempty(), format, args);
+        va_end(args);
+        return result;
+    }
+
+    return NULL;
+}
+
