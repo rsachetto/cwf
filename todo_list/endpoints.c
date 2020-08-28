@@ -5,7 +5,7 @@
 
 #include "../src/3dparty/ctemplate-1.0/ctemplate.h"
 #include "../src/3dparty/stb/stb_ds.h"
-#include "../src/cwf.h"
+#include "../src/cwf/cwf.h"
 
 ENDPOINT(todo) {
 

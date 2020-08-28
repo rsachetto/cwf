@@ -7,7 +7,7 @@
 #include <time.h>
 
 #define STB_DS_IMPLEMENTATION
-#include "3dparty/stb/stb_ds.h"
+#include "../3dparty/stb/stb_ds.h"
 #include "cwf.h"
 
 static void decode_query(request_item **v, const char *query) {
@@ -191,6 +191,7 @@ void write_http_headers(http_header header) {
             fprintf(stdout, "%s: %s\r\n", header[i].key, header[i].value);
         }
     }
+    fflush(stdout);
 }
 
 http_header new_empty_header() {
@@ -299,7 +300,7 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
         str = str + 1;
     }
 
-    if(!*QUERY_STRING) {
+    if(QUERY_STRING && !*QUERY_STRING) {
         char *first_slash = strchr(str, '/');
         if(first_slash) {
             if(uri_len > 1) {

@@ -1,9 +1,8 @@
-#include "cwf.h"
+#include "../cwf/cwf.h"
 #include "ini_parse.h"
 #include "3dparty/stb/stb_ds.h"
 #include <string.h>
 #include <stdlib.h>
-
 
 int parse_endpoint_configuration(void* user, const char* section, const char* name, const char* value) {
 

@@ -4,11 +4,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "3dparty/ccgi-1.2/ccgi.h"
-#include "3dparty/ctemplate-1.0/ctemplate.h"
-#include "3dparty/json/json.h"
-#include "3dparty/sds/sds.h"
-#include "3dparty/sqlite/sqlite3.h"
+#include "../3dparty/ccgi-1.2/ccgi.h"
+#include "../3dparty/ctemplate-1.0/ctemplate.h"
+#include "../3dparty/json/json.h"
+#include "../3dparty/sds/sds.h"
+#include "../3dparty/sqlite/sqlite3.h"
 
 #define IS_REQ_GET(request) strcmp(request->method, "GET") == 0
 #define IS_REQ_POST(request) strcmp(request->method, "POST") == 0

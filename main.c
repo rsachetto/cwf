@@ -4,18 +4,19 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "src/cwf.h"
-#include "src/ini_parse.h"
+#include "src/cwf/cwf.h"
+#include "src/ini_parse/ini_parse.h"
 
 //@todo enable support for multiple applications in a single site.
-//this can be achieved by creating a site.ini file that configure the endpoints
-//maybe we will need to search in all the shared libraries to a certain endpoint
+// this can be achieved by creating a site.ini file that configure the endpoints
+// and merging all endpoints in a single library
 
-//@todo create a development server. We will need to fork a process and replace its stdin with the 
-//parent stdout. And the parent stdin with the child stdout.
+//@todo create a development server. We will need to fork a process and replace its stdin with the
+// parent stdout and the parent stdin with the child stdout.
 
 //@todo: create a ini file to configure the site options like the debug_server, the endpoints file, the endpoints
 // library and the database file
+
 //@todo add CSRF protection - https://owasp.org/www-community/attacks/csrf
 // https://codefellows.github.io/sea-python-401d4/lectures/pyramid_day6_csrf.html
 #define ENDPOINTS_FILE "/var/www/cwf/endpoints.ini"
@@ -109,7 +110,10 @@ int main(int argc, char **argv) {
     if(!error_found) response = endpoint_function(cwf_vars, NULL);
 
     write_http_headers(cwf_vars->headers);
-    if(response) fprintf(stdout, "%s", response);
+    if(response) {
+        fprintf(stdout, "%s", response);
+        fflush(stdout);
+    }
     cwf_save_session(cwf_vars->session);
     //@todo maybe we will also need to release the file locks if the section is not readonly
     return 0;

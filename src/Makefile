@@ -15,11 +15,11 @@ libcwf.a: $(OBJS) $(CRYPT)
 	ar r libcwf.a $(OBJS) $(CRYPT)
 	ranlib libcwf.a
 
-cwf.o: cwf.c cwf.h 
-	gcc $(CFLAGS) -c cwf.c
+cwf.o: cwf/cwf.c cwf/cwf.h 
+	gcc $(CFLAGS) -c cwf/cwf.c
 
-ini_parse.o: ini_parse.c ini_parse.h
-	gcc $(CFLAGS) -c ini_parse.c
+ini_parse.o: ini_parse/ini_parse.c ini_parse/ini_parse.h
+	gcc $(CFLAGS) -c ini_parse/ini_parse.c
 
 ctemplate.o: 3dparty/ctemplate-1.0/ctemplate.c 3dparty/ctemplate-1.0/ctemplate.h
 	gcc $(CFLAGS) -c 3dparty/ctemplate-1.0/ctemplate.c
@@ -44,8 +44,6 @@ sqlite3.o: 3dparty/sqlite/sqlite3.c 3dparty/sqlite/sqlite3.h
 
 sds.o: 3dparty/sds/sds.c 3dparty/sds/sds.h
 	gcc $(CFLAGS) -c 3dparty/sds/sds.c
-
-
 
 clean:
 	rm -f *.o *.a */*.o
