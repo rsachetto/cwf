@@ -213,7 +213,7 @@ static inline void append_string(char_array *string, const char *to_append) {
     }
 }
 
-//@todo this can be much faster if we do memcpy instead of fors
+// TODO this can be much faster if we do memcpy instead of fors
 void add_cookie_to_header(cwf_cookie *c, http_header *header) {
     if(!c || !c->name || !c->value) return;
 
@@ -273,12 +273,13 @@ endpoint_config_item *new_endpoint_config_hash() {
 }
 
 cwf_request *new_empty_request() {
-    cwf_request *req = (cwf_request *)malloc(sizeof(cwf_request));
-    req->method = NULL;
-    req->urlencoded_data = NULL;
-    req->data_type = NULL;
-    sh_new_arena(req->urlencoded_data);
+    cwf_request *req = (cwf_request *)calloc(1, sizeof(cwf_request));
 
+    shdefault(req->server_data, NULL);
+    sh_new_strdup(req->server_data);
+
+    shdefault(req->urlencoded_data, NULL);
+    sh_new_strdup(req->urlencoded_data);
     return req;
 }
 
@@ -422,7 +423,6 @@ cwf_request *new_from_env_vars() {
     shput(req->server_data, "HTTP_USER_AGENT", getenv("HTTP_USER_AGENT"));
     shput(req->server_data, "CONTENT_LENGTH", getenv("CONTENT_LENGTH"));
     shput(req->server_data, "REQUEST_METHOD", getenv("REQUEST_METHOD"));
-    shput(req->server_data, "REQUEST_METHOD", getenv("REQUEST_METHOD"));
     shput(req->server_data, "REQUEST_SCHEME", getenv("REQUEST_SCHEME"));
     shput(req->server_data, "REQUEST_URI", getenv("REQUEST_URI"));
     shput(req->server_data, "DOCUMENT_URI", getenv("DOCUMENT_URI"));
@@ -469,7 +469,6 @@ cwf_request *new_from_env_vars() {
     shput(req->server_data, "API_VERSION", getenv("API_VERSION"));
 
     req->server_data_len = shlen(req->server_data);
-
     req->method = getenv("REQUEST_METHOD");
 
     if(IS_REQ_GET(req)) {
@@ -490,7 +489,7 @@ cwf_request *new_from_env_vars() {
             req->data_type = "json";
 
         } else {  // multipart
-            //@todo handle multpart input (get from liccgi)
+            // TODO handle multpart input (get from liccgi)
         }
     }
 
@@ -589,7 +588,7 @@ static int sqlite_callback(void *cfw_db, int num_results, char **column_values, 
 void execute_query(const char *query, cfw_database *database) {
     char *errmsg;
 
-    // @todo We will have to free all records
+    // TODO We will have to free all records
     if(database->records) {
         arrfree(database->records);
         database->records = NULL;
@@ -619,7 +618,7 @@ TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value
         if(tmp) value = tmp[0];
 
         if(modify) {
-            modify(name, value);
+            modify(&name, &value);
         }
 
         varlist = TMPL_add_var(varlist, name, value, 0);
@@ -639,7 +638,7 @@ TMPL_varlist *db_record_to_varlist(TMPL_varlist *varlist, cfw_database *database
             }
 
             if(modify) {
-                modify(name, value);
+                modify(&name, &value);
             }
 
             varlist = TMPL_add_var(varlist, name, value, 0);
@@ -663,7 +662,7 @@ TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, 
             if(database->records[i][j].value) value = strdup(database->records[i][j].value);
 
             if(modify) {
-                modify(name, value);
+                modify(&name, &value);
             }
 
             loop_varlist = TMPL_add_var(loop_varlist, name, value, 0);
@@ -746,27 +745,6 @@ void cwf_redirect(const char *url, http_header *headers) {
     add_custom_header("Location", value, headers);
 }
 
-// @todo this is only a silly test.. we should think in another way to store the session files. GDBM maybe?
-static void read_session_file(cwf_session *session, FILE *session_file) {
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t nread;
-    char *key;
-    char *value;
-    int count = 0;
-
-    while((nread = getline(&line, &len, session_file)) != -1) {
-        if(count % 2 == 0) {
-            key = strdup(line);
-        } else {
-            shput(session->data, key, strdup(line));
-            free(key);
-        }
-    }
-
-    free(line);
-}
-
 static int sqlite_callback_for_session(void *data, int num_results, char **column_values, char **column_names) {
     if(num_results) {
         record **line = (record **)data;
@@ -784,7 +762,7 @@ static int sqlite_callback_for_session(void *data, int num_results, char **colum
 static void execute_query_for_session(const char *query, sqlite3 *db, record **data) {
     char *errmsg;
 
-    // @todo We will have to free all records
+    // TODO We will have to free all records
     if(*data) {
         arrfree(*data);
         *data = NULL;
@@ -794,13 +772,14 @@ static void execute_query_for_session(const char *query, sqlite3 *db, record **d
 
     int rc = sqlite3_exec(db, query, sqlite_callback_for_session, (void *)data, &errmsg);
 
-    // @todo handle error
+    // TODO handle error
     if(rc != SQLITE_OK) {
     }
 }
 
-void cwf_session_start(cwf_session **session, http_header *headers) {
-    // @todo section needs to have a lock to access the session file. I thing we will need a semaphore here to handle
+#define SESSION_NAME_TEMPLATE  "%s/session_%s.session"
+void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path) {
+    // TODO section needs to have a lock to access the session file. I thing we will need a semaphore here to handle
     // simultaneos connections. If a section is readonly we dont need to bother with the lockfile
     if(*session == NULL) {
         *session = calloc(1, sizeof(session));
@@ -813,24 +792,24 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
             sh_new_arena((*session)->data);
             shdefault((*session)->data, NULL);
 
-            // @todo let the user define a expire time and the other cookie settings
+            // TODO let the user define a expire time and the other cookie settings
             (*session)->cookie->expires = 12 * 30 * 24 * 60 * 60;
             (*session)->cookie->domain = getenv("SERVER_NAME");
             add_cookie_to_header((*session)->cookie, headers);
 
-            char session_file_name[128];
-            // @todo use c11 to avoid insecure string functions
-            sprintf(session_file_name, "/var/www/cwf/session_%s", sid);
+            char session_file_name[256];
+            // TODO use c11 to avoid insecure string functions
+            sprintf(session_file_name, SESSION_NAME_TEMPLATE, session_files_path, sid);
             (*session)->db_filename = strdup(session_file_name);
 
             free(sid);
 
-            //@todo We only need to create a new file for the session
+            // TODO We only need to create a new file for the session
             sqlite3 *session_file;
             int rc =
                 sqlite3_open_v2(session_file_name, &session_file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, NULL);
 
-            // @todo handle session errors
+            // TODO handle session errors
             if(rc != SQLITE_OK) {
                 const char *err = sqlite3_errmsg(session_file);
                 fprintf(stderr, "%s\n", err);
@@ -842,7 +821,7 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
 
             rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
-            // @todo handle session errors
+            // TODO handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
                 sqlite3_free(error);
@@ -852,7 +831,7 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
 
             rc = sqlite3_exec(session_file, sql2, NULL, NULL, &error);
 
-            // @todo handle session errors
+            // TODO handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
                 sqlite3_free(error);
@@ -862,15 +841,15 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
 
         } else {
             char session_file_name[1024];
-            // @todo use c11 to avoid insecure string functions
-            sprintf(session_file_name, "/var/www/cwf/session_%s", (*session)->cookie->value);
+            // TODO use c11 to avoid insecure string functions
+            sprintf(session_file_name, SESSION_NAME_TEMPLATE, session_files_path, (*session)->cookie->value);
             (*session)->db_filename = strdup(session_file_name);
 
             // We only need to create a new file for the session
             sqlite3 *session_file;
             int rc = sqlite3_open((*session)->db_filename, &session_file);
 
-            // @todo handle session errors
+            // TODO handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
             }
@@ -879,7 +858,7 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
             char *sql = "CREATE TABLE IF NOT EXISTS session_data (key TEXT PRIMARY KEY, value TEXT);";
             rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
-            // @todo handle session errors
+            // TODO handle session errors
             if(rc != SQLITE_OK) {
                 sqlite3_close(session_file);
                 sqlite3_free(error);
@@ -892,16 +871,14 @@ void cwf_session_start(cwf_session **session, http_header *headers) {
     }
 }
 
-void cwf_session_destroy(cwf_session **session, http_header *headers) {
+void cwf_session_destroy(cwf_session **session, http_header *headers, char *session_files_path) {
     if(*session == NULL) {
         return;
     } else {
         char session_file_name[1024];
 
-        // @todo use c11 to avoid insecure string functions
-        sprintf(session_file_name, "/var/www/cwf/session_%s", (*session)->cookie->value);
-
-        // shfree((*session)->data);
+        // TODO use c11 to avoid insecure string functions
+        sprintf(session_file_name, SESSION_NAME_TEMPLATE, session_files_path, (*session)->cookie->value);
 
         (*session)->cookie->expires = -3600 * 24;
         add_cookie_to_header((*session)->cookie, headers);
@@ -922,25 +899,25 @@ void cwf_save_session(cwf_session *session) {
     sqlite3 *session_file;
     int rc = sqlite3_open(session->db_filename, &session_file);
 
-    // @todo handle session errors
+    // TODO handle session errors
     if(rc != SQLITE_OK) {
         sqlite3_close(session_file);
     }
 
     int len = shlen(session->data);
 
-    //@todo lets change this to use sds...
+    // TODO lets change this to use sds...
     char sql[1024];
 
     for(int i = 0; i < len; i++) {
-        //@todo create a single query to avoid this loop
+        // TODO create a single query to avoid this loop
         sprintf(sql, "REPLACE INTO session_data (key, value) VALUES('%s', '%s')", session->data[i].key,
                 session->data[i].value);
 
         char *error;
         rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
-        //@todo handle session errors
+        // TODO handle session errors
         if(rc != SQLITE_OK) {
             printf("%s\n", error);
             sqlite3_close(session_file);

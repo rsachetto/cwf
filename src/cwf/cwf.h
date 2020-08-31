@@ -101,14 +101,18 @@ typedef struct cwf_vars_t {
     cwf_request *request;
     cwf_session *session;
     http_header headers;
+    char *endpoints_lib_path;
+    char *endpoints_config_path;
+    char *database_path;
+    char *session_files_path;
+    char *document_root;
     bool print_debug_info;
 } cwf_vars;
 
-#define ENDPOINT_LIB_PATH "/var/www/cwf/libendpoints.so"
 #define ENDPOINT(name) sds name(cwf_vars *cwf_vars, endpoint_config *config)
 typedef ENDPOINT(endpoint_fn);
 
-typedef void modify_db_name_value_fn(char *name, char *value);
+typedef void modify_db_name_value_fn(char **name, char **value);
 
 cwf_request *new_empty_request();
 cwf_request *new_from_env_vars();
@@ -174,11 +178,11 @@ void cwf_generate_default_404_header(http_header *headers);
     return NULL;
 void cwf_redirect(const char *url, http_header *headers);
 
-#define session_start() cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers))
-void cwf_session_start(cwf_session **session, http_header *headers);
+#define session_start() cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
+void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path);
 
-#define session_destroy() cwf_session_destroy(&(cwf_vars->session), &(cwf_vars->headers))
-void cwf_session_destroy(cwf_session **session, http_header *headers);
+#define session_destroy() cwf_session_destroy(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
+void cwf_session_destroy(cwf_session **session, http_header *headers, char *session_files_path);
 
 void cwf_save_session(cwf_session *session);
 

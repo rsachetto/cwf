@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -14,10 +15,17 @@
 #include <unistd.h>
 
 #include "../3dparty/sds/sds.h"
+#include "mimetypes.h"
 
-#define HEADER_OK "HTTP/1.0 200 OK"
-#define HEADER_NOT_FOUND "HTTP/1.0 404 Not Found"
-#define HEADER_BAD_REQUEST "HTTP/1.0 400 Bad Request"
+#define STB_DS_IMPLEMENTATION
+#include "../3dparty/stb/stb_ds.h"
+
+#define SERVER_PROTOCOL "HTTP/1.0"
+#define HEADER_OK SERVER_PROTOCOL " 200 OK"
+#define HEADER_NOT_FOUND SERVER_PROTOCOL " 404 Not Found"
+#define HEADER_BAD_REQUEST SERVER_PROTOCOL " 400 Bad Request"
+#define HEADER_INTERNAL_SERVER_ERROR SERVER_PROTOCOL " 500 Internal Server Error"
+#define HEADER_REDIRECT SERVER_PROTOCOL " 302 Found"
 
 #define BYTES 1024
 
@@ -25,7 +33,35 @@ char *ROOT;
 int listener;
 void error(char *);
 void start_server(int port);
-void respond(int);
+void *respond(void *);
+bool verbose = false;
+
+struct mime_type {
+    char *key;    // file extension
+    char *value;  // mime-type
+};
+
+struct mime_type *mime_types;
+
+const char *get_filename_ext(const char *filename) {
+    const char *dot = strrchr(filename, '.');
+    if(!dot || dot == filename) return "";
+    return dot + 1;
+}
+
+static void load_mime_types() {
+    int ext_number;
+    shdefault(mime_types, NULL);
+    sh_new_arena(mime_types);
+
+    for(int i = 0; i < NUM_MIME_TYPES; i++) {
+        sds *extensions = sdssplitlen(mime_types_raw[i][1], sizeof(mime_types_raw[i][1]), " ", 1, &ext_number);
+        for(int j = 0; j < ext_number; j++) {
+            shput(mime_types, extensions[j], mime_types_raw[i][0]);
+        }
+        sdsfreesplitres(extensions, ext_number);
+    }
+}
 
 int main(int argc, char *argv[]) {
     struct sockaddr_in clientaddr;
@@ -40,11 +76,19 @@ int main(int argc, char *argv[]) {
     uid_t uid = getuid(), euid = geteuid();
 
     // Parsing the command line arguments
-    while((c = getopt(argc, argv, "p:r:")) != -1) {
+    while((c = getopt(argc, argv, "p:r:v")) != -1) {
         switch(c) {
-            case 'r':
-                ROOT = strdup(optarg);
-                break;
+            case 'r': {
+                int arglen = strlen(optarg);
+                if(optarg[arglen - 1] != '/') {
+                    ROOT = malloc(arglen + 2);
+                    strcpy(ROOT, optarg);
+                    ROOT[arglen] = '/';
+                    ROOT[arglen + 1] = '\0';
+                } else {
+                    ROOT = strdup(optarg);
+                }
+            } break;
             case 'p':
                 port = strtol(optarg, NULL, 10);
                 if(port < 1 || port > 65535) {
@@ -57,6 +101,8 @@ int main(int argc, char *argv[]) {
                     }
                 }
                 break;
+            case 'v':
+                verbose = true;
             case '?':
                 fprintf(stderr, "Usage: %s -p PORT -r ROOT\n", argv[0]);
                 exit(1);
@@ -65,6 +111,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    load_mime_types();
     start_server(port);
 
     printf("Server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m",
@@ -77,7 +124,9 @@ int main(int argc, char *argv[]) {
         if(client_socket < 0) {
             perror("accept() error");
         } else {
-            respond(client_socket);
+            // pthread_t thread;
+            // pthread_create(&thread, NULL, respond, (void *)&client_socket);
+            respond((void *)&client_socket);
         }
     }
 
@@ -131,7 +180,7 @@ void send_header(int socket, const char *header, bool last) {
 #define CHILD_READ writepipe[0]
 #define PARENT_WRITE writepipe[1]
 
-void execute_cgi(int socket, sds *request_lines) {
+void execute_cgi(int socket, sds *request_headers, sds request_content, int num_headers) {
     int writepipe[2] = {-1, -1}, /* parent -> child */
         readpipe[2] = {-1, -1};  /* child -> parent */
     pid_t childpid;
@@ -143,14 +192,55 @@ void execute_cgi(int socket, sds *request_lines) {
 
     int method_uri_version_count;
     sds *method_uri_version =
-        sdssplitlen(request_lines[0], sdslen(request_lines[0]), " ", 1, &method_uri_version_count);
+        sdssplitlen(request_headers[0], sdslen(request_headers[0]), " ", 1, &method_uri_version_count);
 
     char *method = method_uri_version[0];
     char *uri = method_uri_version[1];
 
     setenv("REQUEST_METHOD", method, 1);
     setenv("REQUEST_URI", uri, 1);
-    setenv("QUERY_STRING", "", 1);
+    setenv("SERVER_PROTOCOL", SERVER_PROTOCOL, 1);
+    setenv("REQUEST_SCHEME", "http", 1);
+    setenv("DOCUMENT_ROOT", ROOT, 1);
+
+    char *question_mark = strchr(uri, '?');
+
+    if(question_mark) {
+        char *query_string = strndup(question_mark + 1, strlen(uri) - (size_t)question_mark);
+        setenv("QUERY_STRING", query_string, 1);
+        free(query_string);
+    } else {
+        setenv("QUERY_STRING", "", 1);
+    }
+
+    for(int i = 0; i < num_headers; i++) {
+        if(*request_headers[i]) {
+            int pair_count;
+            sds *key_value = sdssplitlen(request_headers[i], sdslen(request_headers[i]), ": ", 2, &pair_count);
+            char *header_name = key_value[0];
+            char *header_value = key_value[1];
+
+            if(strncasecmp(header_name, "Content-Length", 15) == 0) {
+                setenv("CONTENT_LENGTH", header_value, 1);
+            } else if(strncasecmp(header_name, "Content-Type", 12) == 0) {
+                setenv("CONTENT_TYPE", header_value, 1);
+            } else if(strncasecmp(header_name, "Cookie", 6) == 0) {
+                setenv("HTTP_COOKIE", header_value, 1);
+            } else if(strncasecmp(header_name, "Host", 12) == 0) {
+                setenv("HTTP_HOST", header_value, 1);
+                int count;
+                sds *host_port = sdssplitlen(header_value, strlen(header_value), ":", 1, &count);
+                if(count == 1) {
+                    setenv("SERVER_NAME", header_value, 1);
+                } else if(count == 2) {
+                    setenv("SERVER_NAME", host_port[0], 1);
+                    setenv("SERVER_PORT", host_port[1], 1);
+                }
+            }
+
+            sdsfreesplitres(key_value, pair_count);
+        }
+    }
 
     if((childpid = fork()) == -1) {
         perror("fork");
@@ -175,15 +265,18 @@ void execute_cgi(int socket, sds *request_lines) {
     } else {
         close(CHILD_READ);
         close(CHILD_WRITE);
-        // TODO: read child stdout to send through the socket
-        char buffer[4096];
 
-        // TODO: we need to decide how to handle status messages comming from the cgi script.
-        // The cgi sends us a Header Status: 404....
-        send_header(socket, HEADER_NOT_FOUND, false);
+        if(request_content) write(PARENT_WRITE, request_content, sdslen(request_content));
 
+        char buffer[2] = {0};
+
+        sds response_from_child = sdsempty();
+
+        bool headers_end_found = false;
+
+        // here we read the headers
         while(1) {
-            ssize_t count = read(PARENT_READ, buffer, sizeof(buffer));
+            ssize_t count = read(PARENT_READ, buffer, 1);
             if(count == -1) {
                 if(errno == EINTR) {
                     continue;
@@ -194,9 +287,121 @@ void execute_cgi(int socket, sds *request_lines) {
             } else if(count == 0) {
                 break;
             } else {
-                printf("%s\n", buffer);
-                write(socket, buffer, count);
+                response_from_child = sdscat(response_from_child, buffer);
+                int len = sdslen(response_from_child);
+
+                if(len >= 4) {
+                    headers_end_found = (response_from_child[len - 4] == '\r' && response_from_child[len - 3] == '\n' &&
+                                         response_from_child[len - 2] == '\r' && response_from_child[len - 1] == '\n');
+                    if(headers_end_found) break;
+                }
             }
+        }
+
+        bool header_error = false;
+        sds status_msg = sdsnew(HEADER_OK);
+        int status_index = -1;
+
+        sds response_headers = NULL;
+        bool redirect_found = false;
+
+        if(!headers_end_found) {
+            fprintf(stderr, "No headers found - sending %s\n", HEADER_INTERNAL_SERVER_ERROR);
+            send_header(socket, HEADER_INTERNAL_SERVER_ERROR, true);
+        } else {
+            int lines_count;
+            sds *response_lines =
+                sdssplitlen(response_from_child, sdslen(response_from_child), "\r\n", strlen("\r\n"), &lines_count);
+            // The last 2 lines are empty strings
+            lines_count -= 2;
+
+            for(int i = 0; i < lines_count; i++) {
+                int pair_count;
+                sds *key_value = sdssplitlen(response_lines[i], sdslen(response_lines[i]), ": ", 2, &pair_count);
+
+                if(pair_count != 2) {
+                    fprintf(stderr, "Invalid header %s\n", response_lines[i]);
+                    sdsfreesplitres(key_value, pair_count);
+                    header_error = true;
+                    break;
+                }
+
+                if(strncasecmp(key_value[0], "Status", 6) == 0) {
+                    status_index = i;
+                    sdsfree(status_msg);
+                    status_msg = sdscatfmt(sdsempty(), "HTTP/1.0 %s", key_value[1]);
+                } else if(strncasecmp(key_value[0], "Location", 8) == 0) {
+                    redirect_found = true;
+                    sdsfree(status_msg);
+                    status_msg = sdsnew(HEADER_REDIRECT);
+                }
+                if(!header_error) sdsfreesplitres(key_value, pair_count);
+            }
+
+            if(header_error) {
+                send_header(socket, HEADER_INTERNAL_SERVER_ERROR, true);
+            } else {
+                response_headers = sdsempty();
+
+                // We only have the status to send
+                if(lines_count == 1 && status_index == 0) {
+                    response_headers = sdscatfmt(response_headers, "%s\r\n", status_msg);
+                }
+                // We have only one header and is not the status. Send it;
+                else if(lines_count == 1 && status_index == -1) {
+                    response_headers = sdscatfmt(response_headers, "%s\r\n", status_msg);
+                    response_headers = sdscatfmt(response_headers, "%s\r\n", response_lines[0]);
+                } else {
+                    response_headers = sdscatfmt(response_headers, "%s\r\n", status_msg);
+                    for(int i = 0; i < lines_count; i++) {
+                        if(i != status_index) {
+                            response_headers = sdscatfmt(response_headers, "%s\r\n", response_lines[i]);
+                        }
+                    }
+                }
+            }
+            sdsfreesplitres(response_lines, lines_count);
+
+            char response_buffer[2];
+            sds response_content = sdsempty();
+            // here we read the headers
+            while(1) {
+                ssize_t count = read(PARENT_READ, response_buffer, sizeof(response_buffer) - 1);
+                if(count == -1) {
+                    if(errno == EINTR) {
+                        continue;
+                    } else {
+                        perror("read");
+                        exit(1);
+                    }
+                } else if(count == 0) {
+                    break;
+                } else {
+                    response_buffer[count] = '\0';
+                    response_content = sdscat(response_content, response_buffer);
+                }
+            }
+
+            if(verbose) printf("%s\n", response_headers);
+
+            // TODO: maybe we can send the headers withou having to make a string buffer
+            size_t content_length = sdslen(response_content);
+            sds content_length_header = NULL;
+
+            if(content_length > 0) {
+                content_length_header = sdscatfmt(sdsempty(), "Content-Length:%i\r\n\r\n", sdslen(response_content));
+            } else {
+                content_length_header = sdsnew("\r\n\r\n");
+            }
+
+            write(socket, response_headers, sdslen(response_headers));
+            write(socket, content_length_header, sdslen(content_length_header));
+            write(socket, response_content, sdslen(response_content));
+
+            sdsfree(response_from_child);
+            sdsfree(response_headers);
+            sdsfree(response_content);
+            sdsfree(content_length_header);
         }
         close(PARENT_READ);
         wait(0);
@@ -204,7 +409,11 @@ void execute_cgi(int socket, sds *request_lines) {
 }
 
 // client connection
-void respond(int client_socket) {
+void *respond(void *client_socket_addr) {
+    pthread_detach(pthread_self());
+
+    int client_socket = *((int *)client_socket_addr);
+
     // TODO: change all this
     char mesg[2] = {0};
 
@@ -222,7 +431,7 @@ void respond(int client_socket) {
 
     // TODO: this is only the header. We need to read more after we get the content-length. This will be necessary when
     // reading POST data;
-    while((rcvd = recv(client_socket, mesg, 1, 0)) > 0) {
+    while((rcvd = read(client_socket, mesg, 1)) > 0) {
         request = sdscat(request, mesg);
         int len = sdslen(request);
         if(len >= 4) {
@@ -237,7 +446,7 @@ void respond(int client_socket) {
     } else if(rcvd == 0) {  // receive socket closed
         fprintf(stderr, "Client disconnected upexpectedly.\n");
     } else {
-        printf("%s", request);
+        if(verbose) printf("%s\n", request);
 
         request_lines = sdssplitlen(request, sdslen(request), "\r\n", strlen("\r\n"), &lines_count);
 
@@ -257,21 +466,69 @@ void respond(int client_socket) {
                     if((strncmp(uri, "/static/", 8) == 0) || (strncmp(uri, "/media/", 7) == 0)) {
                         path = sdscat(path, uri);
 
-                        printf("file: %s\n", path);
                         if((fd = open(path, O_RDONLY)) != -1) {
-                            send_header(client_socket, HEADER_OK, true);
+                            struct stat st;
+                            stat(path, &st);
+                            size_t size = st.st_size;
+
+                            send_header(client_socket, HEADER_OK, false);
+
+                            sds content_length_header = sdscatprintf(sdsempty(), "Content-Length: %ld", size);
+                            sds content_type_header = sdsempty();
+                            char *mime_type = shget(mime_types, get_filename_ext(path));
+
+                            if(mime_type) {
+                                content_type_header = sdscatfmt(sdsempty(), "Content-Type: %s", mime_type);
+                            } else {
+                                content_type_header = sdsnew("Content-Type: application/octet-stream");
+                            }
+
+                            send_header(client_socket, content_length_header, false);
+                            send_header(client_socket, content_type_header, true);
+
+                            sdsfree(content_length_header);
+                            sdsfree(content_type_header);
+
                             while((bytes_read = read(fd, data_to_send, BYTES)) > 0)
                                 write(client_socket, data_to_send, bytes_read);
                         } else {
                             send_header(client_socket, HEADER_NOT_FOUND, true);
                         }
                     } else {
-                        execute_cgi(client_socket, request_lines);
+                        execute_cgi(client_socket, request_lines, NULL, lines_count);
                     }
                 }
 
                 else if(strncmp(method, "POST", 4) == 0) {
-                    // TODO: handle post here
+                    long content_length = 0;
+                    for(int i = 0; i < lines_count; i++) {
+                        if(strncmp(request_lines[i], "Content-Length:", 15) == 0) {
+                            char *ptr = strchr(request_lines[i], ':');
+
+                            content_length = strtol(ptr + 1, NULL, 10);
+                        }
+                    }
+
+                    long received_data = 0;
+                    char buff[2] = {0};
+                    sds request_content = sdsempty();
+
+                    // TODO: we can read by a content_length/max_buffer
+                    while(received_data < content_length) {
+                        rcvd = read(client_socket, buff, 1);
+                        request_content = sdscat(request_content, buff);
+                        received_data += rcvd;
+                    }
+
+                    if(rcvd < 0) {  // receive error
+                        fprintf(stderr, ("recv() error\n"));
+                    } else if(rcvd == 0) {  // receive socket closed
+                        fprintf(stderr, "Client disconnected upexpectedly.\n");
+                    } else {
+                        if(verbose) printf("%s\n", request_content);
+                        execute_cgi(client_socket, request_lines, request_content, lines_count);
+                    }
+
                 } else {
                     send_header(client_socket, HEADER_BAD_REQUEST, true);
                 }

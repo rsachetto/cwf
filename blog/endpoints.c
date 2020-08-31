@@ -5,7 +5,7 @@
 
 #include "../src/3dparty/ctemplate-1.0/ctemplate.h"
 #include "../src/3dparty/stb/stb_ds.h"
-#include "../src/cwf.h"
+#include "../src/cwf/cwf.h"
 
 ENDPOINT(login) {
     TMPL_varlist *varlist = 0;
@@ -13,11 +13,14 @@ ENDPOINT(login) {
 
     session_start();
 
+    sds template_path = sdsnew(cwf_vars->document_root);
+    template_path = sdscat(template_path, "login.tmpl");
+
     if(IS_GET()) {
         bool auth = (SESSION_GET("auth") != NULL);
 
         if(!auth) {
-            return render_template(varlist, "/var/www/cwf/login.tmpl");
+            return render_template(varlist, template_path);
         } else {
             redirect("/admin_index");
         }
@@ -29,7 +32,7 @@ ENDPOINT(login) {
             SESSION_PUT("auth", "true");
             redirect("/admin_index");
         } else {
-            return render_template(varlist, "/var/www/cwf/login.tmpl");
+            return render_template(varlist, template_path);
         }
     }
 
@@ -56,48 +59,26 @@ ENDPOINT(logout) {
     redirect("/login");
 }
 
-ENDPOINT(cgi_info) {
-    header("Content-Type", "text/plain");
-    sds response = sdsempty();
-
-    response = sdscatfmt(response, "SQLITE VERSION: %s\r\n\r\n", sqlite3_libversion());
-
-    cwf_request *request = cwf_vars->request;
-
-    for(int i = 0; i < request->server_data_len; i++) {
-        response = sdscatfmt(response, "%s %s\n", request->server_data[i].key, request->server_data[i].value);
-    }
-
-    if(strcmp(request->data_type, "urlencoded") == 0) {
-        for(int i = 0; i < request->data_len; i++) {
-            response =
-                sdscatfmt(response, "%s %s\n", request->urlencoded_data[i].key, request->urlencoded_data[i].value);
-        }
-    }
-
-    return response;
-}
-
-void modify_value(char *name, char *value) {
+void modify_value(char **name, char **value) {
     time_t now;
 
     now = time(NULL);
     double seconds;
     int days;
-    char tmp[64];
 
-    if(strcmp(name, "date") == 0) {
-        time_t post_date = strtol(value, NULL, 10);
+    if(strcmp(*name, "date") == 0) {
+        char tmp[64];
+        time_t post_date = strtol(*value, NULL, 10);
         seconds = difftime(now, post_date);
         days = seconds / 3600 / 24;
         sprintf(tmp, "%d", days);
-        free(value);
-        value = strdup(tmp);
+        free(*value);
+        *value = strdup(tmp);
     }
 }
 
 ENDPOINT(site_index) {
-    cfw_database *database = open_database("/var/www/cwf/blog.sqlite");
+    cfw_database *database = open_database(cwf_vars->database_path);
 
     sds response = sdsempty();
 
@@ -151,11 +132,17 @@ ENDPOINT(site_index) {
         loop_varlist = TMPL_get_next_varlist(loop_varlist);
     }
 
-    return render_template(varlist, "/var/www/cwf/index.tmpl");
+    sds template_path = sdsnew(cwf_vars->document_root);
+    template_path = sdscat(template_path, "index.tmpl");
+
+    response = render_template(varlist, template_path);
+    sdsfree(template_path);
+
+    return response;
 }
 
 ENDPOINT(post_detail) {
-    cfw_database *database = open_database("/var/www/cwf/blog.sqlite");
+    cfw_database *database = open_database(cwf_vars->database_path);
 
     sds response = sdsempty();
 
@@ -190,5 +177,36 @@ ENDPOINT(post_detail) {
     TMPL_varlist *varlist = 0;
     varlist = db_record_to_varlist(varlist, database, NULL);
 
-    return render_template(varlist, "/var/www/cwf/blog-post.tmpl");
+    // TODO: provide a macro or function
+    sds template_path = sdsnew(cwf_vars->document_root);
+    template_path = sdscat(template_path, "blog-post.tmpl");
+
+    response = render_template(varlist, template_path);
+    sdsfree(template_path);
+
+    return response;
+}
+
+ENDPOINT(cgi_info) {
+    header("Content-Type", "text/plain");
+    sds response = sdsempty();
+
+    // response = sdscatfmt(response, "SQLITE VERSION: %s\r\n\r\n", sqlite3_libversion());
+
+    cwf_request *request = cwf_vars->request;
+
+    for(int i = 0; i < request->server_data_len; i++) {
+        char *tmp = request->server_data[i].value;
+        if(tmp) response = sdscatfmt(response, "%s %s\n", request->server_data[i].key, tmp);
+    }
+
+    if(strcmp(request->data_type, "urlencoded") == 0) {
+        for(int i = 0; i < request->data_len; i++) {
+            string_array values = request->urlencoded_data[i].value;
+            for(int j = 0; j < arrlen(values); j++)
+                response = sdscatfmt(response, "%s %s\n", request->urlencoded_data[i].key, values[j]);
+        }
+    }
+
+    return response;
 }

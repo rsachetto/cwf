@@ -8,15 +8,14 @@
 #include "../src/cwf/cwf.h"
 
 ENDPOINT(todo) {
-
     //@todo provide a helper function to handle all this crap
-    cfw_database *database = open_database("/var/www/cwf/database.sqlite");
+    cfw_database *database = open_database(cwf_vars->database_path);
 
     if(database->error) {
         return generate_simple_404("Database error: %s", database->error);
     }
-    
-	sds response = sdsempty();
+
+    sds response = sdsempty();
 
     if(IS_POST()) {
         if(POST("taskAdd")) {
@@ -84,6 +83,35 @@ ENDPOINT(todo) {
 
     varlist = db_records_to_loop(varlist, database, "todos", NULL);
 
-    return render_template(varlist, "/var/www/cwf/todo_index.tmpl");
+    sds template_path = sdsnew(cwf_vars->document_root);
+    template_path = sdscat(template_path, "todo_index.tmpl");
+
+    response = render_template(varlist, template_path);
+    sdsfree(template_path);
+
+    return response;
 }
 
+ENDPOINT(cgi_info) {
+    header("Content-Type", "text/plain");
+    sds response = sdsempty();
+
+    // response = sdscatfmt(response, "SQLITE VERSION: %s\r\n\r\n", sqlite3_libversion());
+
+    cwf_request *request = cwf_vars->request;
+
+    for(int i = 0; i < request->server_data_len; i++) {
+        char *tmp = request->server_data[i].value;
+        if(tmp) response = sdscatfmt(response, "%s %s\n", request->server_data[i].key, tmp);
+    }
+
+    if(strcmp(request->data_type, "urlencoded") == 0) {
+        for(int i = 0; i < request->data_len; i++) {
+            string_array values = request->urlencoded_data[i].value;
+            for(int j = 0; j < arrlen(values); j++)
+                response = sdscatfmt(response, "%s %s\n", request->urlencoded_data[i].key, values[j]);
+        }
+    }
+
+    return response;
+}

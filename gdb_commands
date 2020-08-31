@@ -3,4 +3,5 @@ finish
 finish
 set is_waiting = 0
 finish
-b get_endpoint_config
+set breakpoint pending on
+b modify_value
