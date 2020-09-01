@@ -1,0 +1,8 @@
+set environment REQUEST_METHOD=GET
+set environment REQUEST_URI=/
+set environment SERVER_PROTOCOL=HTTP/1.1
+set environment REQUEST_SCHEME=http
+set environment DOCUMENT_ROOT=./
+set environment HTTP_HOST=localhost:8080
+set environment SERVER_NAME=localhost
+set environment SERVER_PORT=8080

@@ -266,20 +266,26 @@ endpoint_config *new_endpoint_config() {
 }
 
 endpoint_config_item *new_endpoint_config_hash() {
-    endpoint_config_item *endpoint_config_hash = calloc(1, sizeof(endpoint_config_item));
+    endpoint_config_item *endpoint_config_hash = NULL;
     sh_new_arena(endpoint_config_hash);
     shdefault(endpoint_config_hash, NULL);
     return endpoint_config_hash;
 }
 
+void free_endpoint_config_hash(endpoint_config_item *hash) {
+    // TODO: free all elements in the hash
+    shfree(hash);
+}
+
 cwf_request *new_empty_request() {
-    cwf_request *req = (cwf_request *)calloc(1, sizeof(cwf_request));
+    cwf_request *req = (cwf_request *)calloc(1, sizeof(struct cwf_request_t));
 
-    shdefault(req->server_data, NULL);
     sh_new_strdup(req->server_data);
+    shdefault(req->server_data, NULL);
 
-    shdefault(req->urlencoded_data, NULL);
     sh_new_strdup(req->urlencoded_data);
+    shdefault(req->urlencoded_data, NULL);
+
     return req;
 }
 
@@ -544,35 +550,36 @@ sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_h
     return template_str;
 }
 
-cfw_database *open_database(const char *db_filename) {
-    cfw_database *database = calloc(1, sizeof(cfw_database));
+void cwf_open_database(cwf_vars *vars) {
+    if(vars->database == NULL) vars->database = calloc(1, sizeof(struct cwf_database_t));
 
-    int rc = sqlite3_open(db_filename, &(database->db));
+    int rc = sqlite3_open(vars->database_path, &(vars->database->db));
 
     if(rc != SQLITE_OK) {
-        database->error = strdup(sqlite3_errmsg(database->db));
-        sqlite3_close(database->db);
+        vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
+        sqlite3_close(vars->database->db);
     }
-
-    return database;
 }
 
-static int sqlite_callback(void *cfw_db, int num_results, char **column_values, char **column_names) {
+void cwf_close_database(cwf_vars *vars) {
+    sqlite3_close(vars->database->db);
+}
+
+static int sqlite_callback(void *cwf_db, int num_results, char **column_values, char **column_names) {
     if(num_results) {
-        cfw_database *database = (cfw_database *)cfw_db;
+        cwf_database *database = (cwf_database *)cwf_db;
 
         record *line;
         sh_new_strdup(line);
         shdefault(line, NULL);
+        sh_new_arena(line);
 
         int num_records = 0;
 
         for(int i = 0; i < num_results; i++) {
             if(column_names[i]) {
                 if(column_values[i]) {
-                    shput(line, strdup(column_names[i]), strdup(column_values[i]));
-                } else {
-                    shput(line, strdup(column_names[i]), NULL);
+                    shput(line, column_names[i], strdup(column_values[i]));
                 }
                 num_records++;
             }
@@ -585,7 +592,7 @@ static int sqlite_callback(void *cfw_db, int num_results, char **column_values, 
     return 0;
 }
 
-void execute_query(const char *query, cfw_database *database) {
+void cwf_execute_query(const char *query, cwf_database *database) {
     char *errmsg;
 
     // TODO We will have to free all records
@@ -627,7 +634,7 @@ TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value
     return varlist;
 }
 
-TMPL_varlist *db_record_to_varlist(TMPL_varlist *varlist, cfw_database *database, modify_db_name_value_fn *modify) {
+TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_database *database, modify_db_name_value_fn *modify) {
     for(int i = 0; i < database->num_records; i++) {
         for(int j = 0; j < get_num_columns(database->records[i]); j++) {
             char *name = strdup(database->records[i][j].key);
@@ -648,8 +655,8 @@ TMPL_varlist *db_record_to_varlist(TMPL_varlist *varlist, cfw_database *database
     return varlist;
 }
 
-TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, char *loop_name,
-                                 modify_db_name_value_fn *modify) {
+TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *database, char *loop_name,
+                                     modify_db_name_value_fn *modify) {
     TMPL_loop *loop = 0;
 
     for(int i = 0; i < database->num_records; i++) {
@@ -666,6 +673,8 @@ TMPL_varlist *db_records_to_loop(TMPL_varlist *varlist, cfw_database *database, 
             }
 
             loop_varlist = TMPL_add_var(loop_varlist, name, value, 0);
+            free(name);
+            free(value);
         }
 
         loop = TMPL_add_varlist(loop, loop_varlist);
@@ -777,7 +786,7 @@ static void execute_query_for_session(const char *query, sqlite3 *db, record **d
     }
 }
 
-#define SESSION_NAME_TEMPLATE  "%s/session_%s.session"
+#define SESSION_NAME_TEMPLATE "%s/session_%s.session"
 void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path) {
     // TODO section needs to have a lock to access the session file. I thing we will need a semaphore here to handle
     // simultaneos connections. If a section is readonly we dont need to bother with the lockfile
@@ -906,25 +915,25 @@ void cwf_save_session(cwf_session *session) {
 
     int len = shlen(session->data);
 
-    // TODO lets change this to use sds...
-    char sql[1024];
+    sds query = sdsempty();
 
     for(int i = 0; i < len; i++) {
-        // TODO create a single query to avoid this loop
-        sprintf(sql, "REPLACE INTO session_data (key, value) VALUES('%s', '%s')", session->data[i].key,
-                session->data[i].value);
-
-        char *error;
-        rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
-
-        // TODO handle session errors
-        if(rc != SQLITE_OK) {
-            printf("%s\n", error);
-            sqlite3_close(session_file);
-            break;
-        }
+        query = sdscatprintf(query, "REPLACE INTO session_data (key, value) VALUES('%s', '%s');", session->data[i].key,
+                             session->data[i].value);
     }
 
+    char *error;
+    rc = sqlite3_exec(session_file, query, NULL, NULL, &error);
+
+    // TODO handle session errors
+    if(rc != SQLITE_OK) {
+        fprintf(stderr, "%s\n", error);
+        sqlite3_close(session_file);
+        sdsfree(query);
+        return;
+    }
+
+    sdsfree(query);
     sqlite3_close(session_file);
 }
 
@@ -932,8 +941,8 @@ char *cwf_session_get(cwf_session *session, const char *key) {
     return shget(session->data, key);
 }
 
-char *cwf_session_put(cwf_session *session, const char *key, const char *value) {
-    return shput(session->data, key, strdup(value));
+void cwf_session_put(cwf_session *session, const char *key, const char *value) {
+    shput(session->data, key, strdup(value));
 }
 
 sds simple_404_page(cwf_vars *cwf_vars, char *format, ...) {
@@ -950,3 +959,47 @@ sds simple_404_page(cwf_vars *cwf_vars, char *format, ...) {
     return NULL;
 }
 
+static void free_cwf_request(cwf_request *request) {
+    shfree(request->server_data);
+
+    // TODO: check for json
+    int data_len = shlen(request->urlencoded_data);
+
+    for(int i = 0; i < data_len; i++) {
+        int value_len = arrlen(request->urlencoded_data[i].value);
+        for(int j = 0; j < value_len; i++) {
+            free(request->urlencoded_data[i].value[j]);
+        }
+        arrfree(request->urlencoded_data[i].value);
+    }
+
+    shfree(request->urlencoded_data);
+
+    free(request);
+}
+
+static void free_cwf_headers(http_header header) {
+    int len = shlen(header);
+
+    for(int i = 0; i < len; i++) {
+        free(header[i].value);
+    }
+
+    shfree(header);
+}
+
+void free_cwf_vars(cwf_vars *vars) {
+    // cwf_request *request;
+    // cwf_session *session;
+    // http_header headers;
+    free(vars->endpoints_lib_path);
+    free(vars->endpoints_config_path);
+    free(vars->database_path);
+    free(vars->session_files_path);
+
+    free_cwf_request(vars->request);
+    free_cwf_headers(vars->headers);
+
+    // TODO: free the rest
+    free(vars);
+}

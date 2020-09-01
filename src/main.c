@@ -11,12 +11,6 @@
 // this can be achieved by creating a site.ini file that configure the endpoints
 // and merging all endpoints in a single library
 
-// TODO create a development server. We will need to fork a process and replace its stdin with the
-// parent stdout and the parent stdin with the child stdout.
-
-// TODO: create a ini file to configure the site options like the debug_server, the endpoints file, the endpoints
-// library and the database file
-
 // TODO add CSRF protection - https://owasp.org/www-community/attacks/csrf
 // https://codefellows.github.io/sea-python-401d4/lectures/pyramid_day6_csrf.html
 
@@ -35,9 +29,18 @@ int main(int argc, char **argv) {
 #endif
 
     cwf_vars *cwf_vars = calloc(1, sizeof(struct cwf_vars_t));
+
     cwf_vars->request = new_from_env_vars();
 
-    cwf_vars->document_root = strdup(SERVER("DOCUMENT_ROOT"));
+    char *root = SERVER("DOCUMENT_ROOT");
+
+    endpoint_config_item *endpoint_configs = NULL;
+
+    if(root) {
+        cwf_vars->document_root = root;
+    } else {
+        cwf_vars->document_root = getenv("PWD");
+    }
 
     sds site_config_file = sdsnew(cwf_vars->document_root);
 
@@ -53,8 +56,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    sdsfree(site_config_file);
-
     endpoint_fn *endpoint_function = NULL;
 
     if(!error_found) {
@@ -65,7 +66,7 @@ int main(int argc, char **argv) {
             error_found = true;
         }
 
-        endpoint_config_item *endpoint_configs = new_endpoint_config_hash();
+        endpoint_configs = new_endpoint_config_hash();
 
         if(ini_parse(cwf_vars->endpoints_config_path, parse_endpoint_configuration, (void *)&endpoint_configs) < 0) {
             if(!error_found) {
@@ -124,11 +125,19 @@ int main(int argc, char **argv) {
     if(endpoint_function && !error_found) response = endpoint_function(cwf_vars, NULL);
 
     write_http_headers(cwf_vars->headers);
+
     if(response) {
         fprintf(stdout, "%s", response);
         fflush(stdout);
+        sdsfree(response);
     }
+
     cwf_save_session(cwf_vars->session);
+    sdsfree(site_config_file);
+    free_cwf_vars(cwf_vars);
+
+    if(endpoint_configs) free_endpoint_config_hash(endpoint_configs);
+
     // TODO maybe we will also need to release the file locks if the section is not readonly
     return 0;
 }

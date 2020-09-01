@@ -78,42 +78,22 @@ void modify_value(char **name, char **value) {
 }
 
 ENDPOINT(site_index) {
-    cfw_database *database = open_database(cwf_vars->database_path);
 
-    sds response = sdsempty();
+	open_database_or_return_404();
 
-    if(database->error) {
-        generate_default_404_header();
-
-        if(cwf_vars->print_debug_info) {
-            response = sdscatfmt(response, "Database error: %s", database->error);
-        }
-
-        return response;
-    }
-
-    execute_query("SELECT * FROM posts ORDER BY id DESC; ", database);
-
-    if(database->error) {
-        generate_default_404_header();
-
-        if(cwf_vars->print_debug_info) {
-            response = sdscatfmt(response, "Database error: %s", database->error);
-        }
-
-        return response;
-    }
+    execute_query_or_return_404("SELECT * FROM posts ORDER BY id DESC;");
 
     TMPL_varlist *varlist = 0;
-    varlist = db_records_to_loop(varlist, database, "loop", modify_value);
+
+    varlist = db_records_to_loop(varlist, "loop", modify_value);
 
     //@todo add a function to do this
     TMPL_varlist *loop_varlist = TMPL_get_loop_varlist(TMPL_get_loop(varlist));
 
-    for(int i = 0; i < database->num_records; i++) {
-        for(int j = 0; j < get_num_columns(database->records[i]); j++) {
-            char *name = strdup(database->records[i][j].key);
-            char *value = database->records[i][j].value;
+    for(int i = 0; i < cwf_vars->database->num_records; i++) {
+        for(int j = 0; j < get_num_columns(cwf_vars->database->records[i]); j++) {
+            char *name = strdup(cwf_vars->database->records[i][j].key);
+            char *value = cwf_vars->database->records[i][j].value;
 
             if(strcmp(name, "content") == 0) {
                 char *less_content = strip_html_tags(value);
@@ -135,25 +115,15 @@ ENDPOINT(site_index) {
     sds template_path = sdsnew(cwf_vars->document_root);
     template_path = sdscat(template_path, "index.tmpl");
 
-    response = render_template(varlist, template_path);
+    sds response = render_template(varlist, template_path);
     sdsfree(template_path);
 
     return response;
 }
 
 ENDPOINT(post_detail) {
-    cfw_database *database = open_database(cwf_vars->database_path);
 
-    sds response = sdsempty();
-
-    if(database->error) {
-        generate_default_404_header();
-
-        if(cwf_vars->print_debug_info) {
-            response = sdscatfmt(response, "Database error: %s", database->error);
-        }
-        return response;
-    }
+	open_database_or_return_404();
 
     //@todo use a prepared statement here
     char query[1024];
@@ -162,26 +132,16 @@ ENDPOINT(post_detail) {
 
     sprintf(query, "SELECT content FROM posts WHERE id=%d", id);
 
-    execute_query(query, database);
-
-    if(database->error) {
-        generate_default_404_header();
-
-        if(cwf_vars->print_debug_info) {
-            response = sdscatfmt(response, "Database error: %s", database->error);
-        }
-
-        return response;
-    }
+    execute_query_or_return_404(query);
 
     TMPL_varlist *varlist = 0;
-    varlist = db_record_to_varlist(varlist, database, NULL);
+    varlist = db_record_to_varlist(varlist, NULL);
 
     // TODO: provide a macro or function
     sds template_path = sdsnew(cwf_vars->document_root);
     template_path = sdscat(template_path, "blog-post.tmpl");
 
-    response = render_template(varlist, template_path);
+    sds response = render_template(varlist, template_path);
     sdsfree(template_path);
 
     return response;

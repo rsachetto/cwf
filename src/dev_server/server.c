@@ -258,7 +258,7 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
 
         sds path = sdsnew(ROOT);
 
-        path = sdscatfmt(path, "/cgi-bin/cwf.cgi");
+        path = sdscat(path, "/cgi-bin/cwf.cgi");
 
         execlp(path, path, NULL);
 
@@ -410,7 +410,7 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
 
 // client connection
 void *respond(void *client_socket_addr) {
-    pthread_detach(pthread_self());
+    //pthread_detach(pthread_self());
 
     int client_socket = *((int *)client_socket_addr);
 

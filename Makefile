@@ -1,4 +1,4 @@
-OPT_FLAGS=-O3
+OPT_FLAGS=-g3
 
 all: server todo blog
 
