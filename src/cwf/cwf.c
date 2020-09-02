@@ -80,7 +80,7 @@ static void get_post(request_item **v, int len) {
 }
 
 static bool is_int(char *int_char) {
-    int len = strlen(int_char);
+    size_t len = strlen(int_char);
 
     if(len == 0) return false;
 
@@ -94,7 +94,7 @@ static bool is_int(char *int_char) {
 }
 
 static bool is_float(char *float_char) {
-    int len = strlen(float_char);
+    size_t len = strlen(float_char);
 
     if(len == 0) return false;
 
@@ -102,11 +102,12 @@ static bool is_float(char *float_char) {
 
     for(int i = 0; i < len; ++i) {
         if(float_char[i] == '.') {
-            if(!dot_found)
+            if(!dot_found) {
                 dot_found = true;
-            else
+            }
+            else {
                 return false;
-
+            }
             continue;
         }
 
@@ -158,9 +159,9 @@ cwf_cookie *get_cookie() {
             v->name = strdup(cookie_data[0]);
             v->value = strdup(cookie_data[1]);
         } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Expires", 7)) {
-            v->expires = strtol(cookie_data[1], NULL, 10);
+            v->expires = (int) strtol(cookie_data[1], NULL, 10);
         } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Max-Age", 7)) {
-            v->max_age = strtol(cookie_data[1], NULL, 10);
+            v->max_age = (int) strtol(cookie_data[1], NULL, 10);
         } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Domain", 6)) {
             v->domain = strdup(cookie_data[1]);
 
@@ -205,19 +206,10 @@ void add_custom_header(const char *name, const char *value, http_header *header)
     if(value) shput(*header, name, strdup(value));
 }
 
-static inline void append_string(char_array *string, const char *to_append) {
-    int len = strlen(to_append);
-
-    for(int i = 0; i < len; i++) {
-        arrput(*string, to_append[i]);
-    }
-}
-
-// TODO this can be much faster if we do memcpy instead of fors
 void add_cookie_to_header(cwf_cookie *c, http_header *header) {
     if(!c || !c->name || !c->value) return;
 
-    int cookie_str_size = strlen(c->name);
+    size_t cookie_str_size = strlen(c->name);
     cookie_str_size += strlen(c->value);
     cookie_str_size += 2;  // = and ;
 
@@ -301,7 +293,7 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
     endpoint_config *it;
     char *tmp = NULL;
 
-    int uri_len = strlen(REQUEST_URI);
+    size_t uri_len = strlen(REQUEST_URI);
 
     if(uri_len > 1) {
         str = str + 1;
@@ -486,12 +478,13 @@ cwf_request *new_from_env_vars() {
         int len;
 
         if((env = getenv("CONTENT_TYPE")) != 0 && strncasecmp(env, "application/x-www-form-urlencoded", 33) == 0 &&
-           (env = getenv("CONTENT_LENGTH")) != 0 && (len = atoi(env)) > 0) {
+           (env = getenv("CONTENT_LENGTH")) != 0 && (len = (int)strtol(env, NULL, 10)) > 0) {
             get_post(&req->urlencoded_data, len);
             req->data_type = "urlencoded";
             req->data_len = shlen(req->urlencoded_data);
         } else if((env = getenv("CONTENT_TYPE")) != 0 && strncasecmp(env, "application/json", 16) == 0 &&
-                  (env = getenv("CONTENT_LENGTH")) != 0 && (len = atoi(env)) > 0) {
+                  (env = getenv("CONTENT_LENGTH")) != 0 && (len = (int)strtol(env, NULL, 10)) > 0) {
+            //TODO: handle json
             req->data_type = "json";
 
         } else {  // multipart
@@ -682,6 +675,10 @@ TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *databa
 
     varlist = TMPL_add_loop(varlist, loop_name, loop);
 
+    sds num_records = sdsfromlonglong(database->num_records);
+    varlist = TMPL_add_var(varlist, "num_records", num_records, 0);
+    sdsfree(num_records);
+
     return varlist;
 }
 
@@ -689,7 +686,7 @@ char_array strip_html_tags(const char *buf) {
     char_array result = NULL;
     bool opened = false;
 
-    int len = strlen(buf);
+    size_t len = strlen(buf);
 
     for(int i = 0; i < len; i++) {
         if(buf[i] == '<') {
@@ -726,9 +723,9 @@ static char *generate_session_id() {
 
     char *b64 = CGI_encode_base64(sha, 32);
 
-    int len = strlen(b64);
+    size_t len = strlen(b64);
 
-    for(int i = 0; i < len; i++) {
+    for(size_t i = 0; i < len; i++) {
         if(b64[i] == '/') b64[i] = '_';
     }
 
@@ -788,8 +785,7 @@ static void execute_query_for_session(const char *query, sqlite3 *db, record **d
 
 #define SESSION_NAME_TEMPLATE "%s/session_%s.session"
 void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path) {
-    // TODO section needs to have a lock to access the session file. I thing we will need a semaphore here to handle
-    // simultaneos connections. If a section is readonly we dont need to bother with the lockfile
+    // TODO section needs to have a lock to access the session file. I thing we will need a semaphore here to handle simultaneous connections. If a section is readonly we don't need to bother with the lockfile
     if(*session == NULL) {
         *session = calloc(1, sizeof(session));
 
@@ -1003,3 +999,5 @@ void free_cwf_vars(cwf_vars *vars) {
     // TODO: free the rest
     free(vars);
 }
+
+#pragma clang diagnostic pop

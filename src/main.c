@@ -1,8 +1,5 @@
-#include <ctype.h>
 #include <dlfcn.h>
 #include <stdio.h>
-#include <string.h>
-#include <unistd.h>
 
 #include "cwf/cwf.h"
 #include "ini_parse/ini_parse.h"
@@ -14,7 +11,7 @@
 // TODO add CSRF protection - https://owasp.org/www-community/attacks/csrf
 // https://codefellows.github.io/sea-python-401d4/lectures/pyramid_day6_csrf.html
 
-#ifdef GDB_DEBUG
+#ifdef DEBUG_CGI
 static void wait_for_gdb_to_attach() {
     int is_waiting = 1;
     while(is_waiting) {
@@ -24,7 +21,7 @@ static void wait_for_gdb_to_attach() {
 #endif
 
 int main(int argc, char **argv) {
-#ifdef GDB_DEBUG
+#ifdef DEBUG_CGI
     wait_for_gdb_to_attach();
 #endif
 
@@ -50,10 +47,8 @@ int main(int argc, char **argv) {
     sds response = NULL;
 
     if(ini_parse(site_config_file, parse_site_configuration, (void *)cwf_vars) < 0) {
-        if(!error_found) {
-            response = simple_404_page(cwf_vars, "Error parsing ini file %s<br/>", site_config_file);
-            error_found = true;
-        }
+        response = simple_404_page(cwf_vars, "Error parsing ini file %s<br/>", site_config_file);
+        error_found = true;
     }
 
     endpoint_fn *endpoint_function = NULL;

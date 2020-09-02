@@ -1,6 +1,22 @@
-OPT_FLAGS=-g3
+PHONY = release debug debug_cgi
 
-all: server todo blog
+all: release server todo blog
+	rm cwf.cgi
+
+all_debug: debug server todo blog
+	rm cwf.cgi
+
+all_debug_cig: debug_cgi debug server todo blog
+	rm cwf.cgi
+
+release:
+	$(eval OPT_FLAGS=-O3)
+
+debug:
+	$(eval OPT_FLAGS=-g3)
+
+debug_cgi:
+	$(eval DEBUG_CGI=-DDEBUG_CGI)
 
 server:
 	gcc ${OPT_FLAGS} src/dev_server/server.c src/3dparty/sds/sds.c -o bin/server -lpthread
@@ -15,7 +31,7 @@ blog: cwf
 
 cwf:
 	cd src/ &&  $(MAKE) EXTRA_C_FLAGS=${OPT_FLAGS}  && cd ..
-	gcc ${OPT_FLAGS} src/main.c src/libcwf.a -o cwf.cgi -ldl -lpthread -lssl -lcrypto
+	gcc ${OPT_FLAGS} ${DEBUG_CGI} src/main.c src/libcwf.a -o cwf.cgi -ldl -lpthread -lssl -lcrypto
 
 clean:
 	cd src/ &&  $(MAKE) clean  && cd ..

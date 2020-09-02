@@ -9,6 +9,7 @@
 #define _CTEMPLATE_H
 
 #include "../sds/sds.h"
+#include <stdio.h>
 
 typedef struct TMPL_varlist TMPL_varlist;
 typedef struct TMPL_loop  TMPL_loop;

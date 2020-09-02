@@ -177,8 +177,10 @@ void add_params_to_request(cwf_request *req, url_params *params);
     if(cwf_vars->database->error) {                                                  \
         return generate_simple_404("Database error: %s", cwf_vars->database->error); \
     }
-
 void cwf_open_database(cwf_vars *vars);
+
+#define close_database() cwf_close_database(cwf_vars);
+void cwf_close_database(cwf_vars *vars);
 
 #define execute_query(query) cwf_execute_query((query), cwf_vars->database)
 #define execute_query_or_return_404(query)                                           \

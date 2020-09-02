@@ -57,3 +57,5 @@ deploy.sh
 example_site/blog.sqlite.local
 bin/
 *.session
+.idea/
+blog/

@@ -1,9 +1,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <netdb.h>
-#include <pthread.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +10,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
+#include <sys/time.h>
 #include "../3dparty/sds/sds.h"
 #include "mimetypes.h"
 
@@ -33,7 +30,7 @@ char *ROOT;
 int listener;
 void error(char *);
 void start_server(int port);
-void *respond(void *);
+void respond(int);
 bool verbose = false;
 
 struct mime_type {
@@ -117,6 +114,8 @@ int main(int argc, char *argv[]) {
     printf("Server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m",
            ROOT, "\033[0m");
 
+
+
     while(1) {
         addrlen = sizeof(clientaddr);
         client_socket = accept(listener, (struct sockaddr *)&clientaddr, &addrlen);
@@ -124,9 +123,7 @@ int main(int argc, char *argv[]) {
         if(client_socket < 0) {
             perror("accept() error");
         } else {
-            // pthread_t thread;
-            // pthread_create(&thread, NULL, respond, (void *)&client_socket);
-            respond((void *)&client_socket);
+            respond(client_socket);
         }
     }
 
@@ -167,11 +164,11 @@ void start_server(int port) {
 }
 
 void send_header(int socket, const char *header, bool last) {
-    write(socket, header, strlen(header));
-    write(socket, "\r\n", 2);
+    send(socket, header, strlen(header), MSG_NOSIGNAL);
+    send(socket, "\r\n", 2, MSG_NOSIGNAL);
 
     if(last) {
-        write(socket, "\r\n", 2);
+        send(socket, "\r\n", 2, MSG_NOSIGNAL);
     }
 }
 
@@ -181,6 +178,7 @@ void send_header(int socket, const char *header, bool last) {
 #define PARENT_WRITE writepipe[1]
 
 void execute_cgi(int socket, sds *request_headers, sds request_content, int num_headers) {
+
     int writepipe[2] = {-1, -1}, /* parent -> child */
         readpipe[2] = {-1, -1};  /* child -> parent */
     pid_t childpid;
@@ -303,7 +301,6 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
         int status_index = -1;
 
         sds response_headers = NULL;
-        bool redirect_found = false;
 
         if(!headers_end_found) {
             fprintf(stderr, "No headers found - sending %s\n", HEADER_INTERNAL_SERVER_ERROR);
@@ -323,6 +320,7 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
                     fprintf(stderr, "Invalid header %s\n", response_lines[i]);
                     sdsfreesplitres(key_value, pair_count);
                     header_error = true;
+                    sdsfreesplitres(key_value, pair_count);
                     break;
                 }
 
@@ -331,11 +329,11 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
                     sdsfree(status_msg);
                     status_msg = sdscatfmt(sdsempty(), "HTTP/1.0 %s", key_value[1]);
                 } else if(strncasecmp(key_value[0], "Location", 8) == 0) {
-                    redirect_found = true;
                     sdsfree(status_msg);
                     status_msg = sdsnew(HEADER_REDIRECT);
                 }
-                if(!header_error) sdsfreesplitres(key_value, pair_count);
+
+                sdsfreesplitres(key_value, pair_count);
             }
 
             if(header_error) {
@@ -394,9 +392,9 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
                 content_length_header = sdsnew("\r\n\r\n");
             }
 
-            write(socket, response_headers, sdslen(response_headers));
-            write(socket, content_length_header, sdslen(content_length_header));
-            write(socket, response_content, sdslen(response_content));
+            send(socket, response_headers, sdslen(response_headers), MSG_NOSIGNAL);
+            send(socket, content_length_header, sdslen(content_length_header), MSG_NOSIGNAL);
+            send(socket, response_content, sdslen(response_content), MSG_NOSIGNAL);
 
             sdsfree(response_from_child);
             sdsfree(response_headers);
@@ -409,10 +407,12 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
 }
 
 // client connection
-void *respond(void *client_socket_addr) {
-    //pthread_detach(pthread_self());
+void respond(int client_socket) {
 
-    int client_socket = *((int *)client_socket_addr);
+    struct timeval start, end;
+    long secs_used,micros_used;
+
+    gettimeofday(&start, NULL);
 
     // TODO: change all this
     char mesg[2] = {0};
@@ -441,10 +441,14 @@ void *respond(void *client_socket_addr) {
         }
     }
 
+    bool error = false;
+
     if(rcvd < 0) {  // receive error
         fprintf(stderr, ("recv() error\n"));
+        error = true;
     } else if(rcvd == 0) {  // receive socket closed
         fprintf(stderr, "Client disconnected upexpectedly.\n");
+        error = true;
     } else {
         if(verbose) printf("%s\n", request);
 
@@ -490,7 +494,7 @@ void *respond(void *client_socket_addr) {
                             sdsfree(content_type_header);
 
                             while((bytes_read = read(fd, data_to_send, BYTES)) > 0)
-                                write(client_socket, data_to_send, bytes_read);
+                                send(client_socket, data_to_send, bytes_read, MSG_NOSIGNAL);
                         } else {
                             send_header(client_socket, HEADER_NOT_FOUND, true);
                         }
@@ -538,4 +542,11 @@ void *respond(void *client_socket_addr) {
     // Closing SOCKET
     shutdown(client_socket, SHUT_RDWR);  // All further send and recieve operations are DISABLED...
     close(client_socket);
+
+    gettimeofday(&end, NULL);
+
+    secs_used=(end.tv_sec - start.tv_sec); //avoid overflow by subtracting first
+    micros_used= ((secs_used*1000000) + end.tv_usec) - (start.tv_usec);
+    if(!error)
+        fprintf(stderr, "Respond to request %s %s took %ld ms\n", method_uri_version[0], method_uri_version[1], micros_used/1000);
 }

@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -7,7 +5,11 @@
 #include "../src/3dparty/stb/stb_ds.h"
 #include "../src/cwf/cwf.h"
 
+#include <sys/time.h>
+
+
 ENDPOINT(todo) {
+
     open_database_or_return_404();
 
     if(IS_POST()) {
@@ -16,10 +18,10 @@ ENDPOINT(todo) {
             char *date = POST("date");
             char *category = POST("category_select");
 
-            char created[64];
+            char created[11];
             time_t now = time(NULL);
             struct tm tm = *gmtime(&now);
-            strftime(created, sizeof(created), "%Y-%m-%d", &tm);
+            strftime(created, sizeof(created), "%d/%m/%Y", &tm);
 
             sds query = sdscatfmt(sdsempty(),
                                   "INSERT INTO todolist_todolist (title, due_date, created, category_id, content) "
@@ -33,17 +35,22 @@ ENDPOINT(todo) {
 
         else if(POST("taskDelete")) {
             string_array checkedlist = POST_ARRAY("checkedbox");
+            int num_ids = arrlen(checkedlist);
+            sds query = sdsempty();
 
-            for(int i = 0; i < arrlen(checkedlist); i++) {
-                sds query = sdscatfmt(sdsempty(), "DELETE FROM todolist_todolist where id=%s;", checkedlist[i]);
-
+            if(num_ids > 0) {
+                sds ids_list = sdsjoin(checkedlist, num_ids, ", ");
+                query = sdscatfmt(query, "DELETE FROM todolist_todolist where id in (%s);", ids_list);
                 execute_query_or_return_404(query);
-                // sdsfree(query);
+                sdsfree(query);
             }
+
             redirect("/");
         }
     }
+
     execute_query_or_return_404("SELECT * FROM todolist_category ORDER BY name ASC;");
+
 
     TMPL_varlist *varlist = 0;
     varlist = db_records_to_loop(varlist, "categories", NULL);
@@ -64,10 +71,14 @@ ENDPOINT(todo) {
     sds response = render_template(varlist, template_path);
 
     sdsfree(template_path);
+
+    close_database();
+
     return response;
 }
 
 ENDPOINT(cgi_info) {
+
     header("Content-Type", "text/plain");
     sds response = sdsempty();
 
