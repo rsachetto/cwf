@@ -126,12 +126,6 @@ static bool is_float(char *float_char) {
     return true;
 }
 
-static void concat_error_msg(char_array *current_error, char *error_to_add) {
-    for(int i = 0; i < strlen(error_to_add); ++i) {
-        arrpush(*current_error, error_to_add[i]);
-    }
-}
-
 endpoint_config *new_endpoint_config() {
     endpoint_config *config = calloc(1, sizeof(endpoint_config));
     return config;
@@ -173,6 +167,8 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
         str = str + 1;
     }
 
+    sds err = sdsempty();
+
     if(QUERY_STRING && !*QUERY_STRING) {
         char *first_slash = strchr(str, '/');
         if(first_slash) {
@@ -189,22 +185,20 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
 
         if(it && it->params) {
             int expected_params = arrlen(it->params);
-            char err[1024];
 
             if(first_slash) {
                 char *aux = strdup(first_slash + 1);
 
-                char *pch;
-                pch = strtok(aux, "/");
+                char *token;
+                token = strtok(aux, "/");
                 int num_params = 0;
 
-                while(pch != NULL) {
+                while(token != NULL) {
                     url_params url_params;
                     if(num_params < expected_params) {
                         url_params = it->params[num_params];
                     } else {
-                        sprintf(err, "Number of parameters exceed the configured number of parameters (%d).\n", expected_params);
-                        concat_error_msg(&(it->error), err);
+                        err = sdscatfmt(err, "Number of parameters exceed the configured number of parameters (%i).\n", expected_params);
                         break;
                     }
 
@@ -212,45 +206,40 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
                     case STRING:
                         break;
                     case INT:
-                        if(!is_int(pch)) {
-                            sprintf(err, "%s is configured to be an integer but %s is not a valid integer.\n", url_params.name, pch);
-                            concat_error_msg(&(it->error), err);
+                        if(!is_int(token)) {
+                            err = sdscatfmt(err, "%s is configured to be an integer but %s is not a valid integer.\n", url_params.name, token);
                         }
                         break;
                     case FLOAT:
-                        if(!is_float(pch)) {
-                            sprintf(err, "%s is configured to be a float but %s is not a valid float.\n", url_params.name, pch);
-                            concat_error_msg(&(it->error), err);
+                        if(!is_float(token)) {
+                            err = sdscatfmt(err, "%s is configured to be a float but %s is not a valid float.\n", url_params.name, token);
                         }
                         break;
                     default:
-                        sprintf(err, "%s is configured to an invalid type. Valid types are i, s or f.\n", url_params.name);
-                        concat_error_msg(&(it->error), err);
+                        err = sdscatfmt(err, "%s is configured to an invalid type. Valid types are i, s or f.\n", url_params.name);
                         break;
                     }
 
-                    it->params[num_params].value = strdup(pch);
+                    it->params[num_params].value = strdup(token);
 
                     num_params++;
 
-                    pch = strtok(NULL, "/");
+                    token = strtok(NULL, "/");
                 }
 
                 free(aux);
 
                 if(num_params != expected_params) {
-                    sprintf(err,
-                            "Number of parameters are different from the configured number of parameters (received %d, "
-                            "expected %d).\n",
-                            num_params, expected_params);
-                    concat_error_msg(&(it->error), err);
+                    err = sdscatfmt(err,
+                                    "Number of parameters are different from the configured number of parameters (received %i, "
+                                    "expected %i).\n",
+                                    num_params, expected_params);
                 }
             } else {
-                sprintf(err,
-                        "Number of parameters are different from the configured number of parameters (received 0, "
-                        "expected %d).\n",
-                        expected_params);
-                concat_error_msg(&(it->error), err);
+                err = sdscatfmt(err,
+                                "Number of parameters are different from the configured number of parameters (received 0, "
+                                "expected %i).\n",
+                                expected_params);
             }
         }
 
@@ -265,6 +254,10 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
         }
 
         it = shget(endpoints_cfg, tmp);
+    }
+
+    if(sdslen(err) > 0) {
+        it->error = err;
     }
 
     free(tmp);

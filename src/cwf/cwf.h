@@ -86,7 +86,7 @@ typedef struct {
 typedef struct endpoint_config_t {
     char *function;
     url_params *params;
-    char_array error;
+    sds error;
 } endpoint_config;
 
 typedef struct endpoint_config_item_t {
@@ -106,17 +106,12 @@ typedef struct request_item_t {
     string_array value;
 } request_item;
 
-typedef struct server_data_t {
-    char *key;
-    char *value;
-} server_data;
-
 typedef struct cwf_request_t {
     char *method;
     char *data_type;
     int server_data_len;
     int data_len;
-    struct server_data_t *server_data;
+    string_hash server_data;
     union {
         json_value *json_data;
         request_item *urlencoded_data;

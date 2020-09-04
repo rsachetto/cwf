@@ -17,6 +17,9 @@
 #define STB_DS_IMPLEMENTATION
 #include "../3dparty/stb/stb_ds.h"
 
+#define VERSION "0.1"
+#define SERVER_SOFTWARE "CWF Development server (" VERSION ")"
+
 #define SERVER_PROTOCOL "HTTP/1.0"
 #define HEADER_OK SERVER_PROTOCOL " 200 OK"
 #define HEADER_NOT_FOUND SERVER_PROTOCOL " 404 Not Found"
@@ -198,6 +201,8 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
     setenv("REQUEST_SCHEME", "http", 1);
     setenv("DOCUMENT_ROOT", ROOT, 1);
 
+    setenv("SERVER_SOFTWARE", SERVER_SOFTWARE, 1);
+
     char *question_mark = strchr(uri, '?');
 
     if(question_mark) {
@@ -221,6 +226,10 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
                 setenv("CONTENT_TYPE", header_value, 1);
             } else if(strncasecmp(header_name, "Cookie", 6) == 0) {
                 setenv("HTTP_COOKIE", header_value, 1);
+            } else if(strncasecmp(header_name, "Accept", 6) == 0) {
+                setenv("HTTP_ACCEPT", header_value, 1);
+            } else if(strncasecmp(header_name, "User-Agent", 10) == 0) {
+                setenv("HTTP_USER_AGENT", header_value, 1);
             } else if(strncasecmp(header_name, "Host", 12) == 0) {
                 setenv("HTTP_HOST", header_value, 1);
                 int count;
