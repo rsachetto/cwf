@@ -106,6 +106,7 @@ typedef struct cwf_vars_t {
     char *endpoints_config_path;
     char *database_path;
     char *session_files_path;
+    char *templates_path;
     char *document_root;
     bool print_debug_info;
 } cwf_vars;

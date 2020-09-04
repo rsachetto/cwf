@@ -18,6 +18,9 @@ int parse_site_configuration(void* user, const char* section, const char* name, 
             config->endpoints_lib_path = strdup(value);
         } else if(strncmp(name, "session_files_path", 18) == 0) {
             config->session_files_path = strdup(value);
+		} else if(strncmp(name, "templates_path", 14) == 0) {
+			free(config->templates_path);
+            config->templates_path = strdup(value);
         } else if(strncmp(name, "print_debug_info", 16) == 0) {
             if(strncasecmp(value, "yes", 3) == 0 || strncasecmp(value, "true", 4) == 0 || strncmp(value, "1", 1) == 0) {
                 config->print_debug_info = true;

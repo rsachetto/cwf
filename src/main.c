@@ -1,5 +1,6 @@
 #include <dlfcn.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "cwf/cwf.h"
 #include "ini_parse/ini_parse.h"
@@ -10,6 +11,11 @@
 
 // TODO add CSRF protection - https://owasp.org/www-community/attacks/csrf
 // https://codefellows.github.io/sea-python-401d4/lectures/pyramid_day6_csrf.html
+
+//TODO: add a stack trace on segfaults... https://stackoverflow.com/questions/2663456/how-to-write-a-signal-handler-to-catch-sigsegv
+//TODO: https://www.gnu.org/software/libc/manual/html_node/Backtraces.html
+
+//TODO: add a sql function with prepared statments. https://stackoverflow.com/questions/9804371/syntax-and-sample-usage-of-generic-in-c11 and https://www.tutorialspoint.com/cprogramming/c_variable_arguments.htm
 
 #ifdef DEBUG_CGI
 static void wait_for_gdb_to_attach() {
@@ -38,6 +44,8 @@ int main(int argc, char **argv) {
     } else {
         cwf_vars->document_root = getenv("PWD");
     }
+
+	cwf_vars->templates_path = strdup(cwf_vars->document_root);
 
     sds site_config_file = sdsnew(cwf_vars->document_root);
 

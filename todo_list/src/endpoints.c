@@ -1,12 +1,11 @@
 #include <string.h>
 #include <time.h>
 
-#include "../src/3dparty/ctemplate-1.0/ctemplate.h"
-#include "../src/3dparty/stb/stb_ds.h"
-#include "../src/cwf/cwf.h"
+#include "../../src/3dparty/ctemplate-1.0/ctemplate.h"
+#include "../../src/3dparty/stb/stb_ds.h"
+#include "../../src/cwf/cwf.h"
 
 #include <sys/time.h>
-
 
 ENDPOINT(todo) {
 
@@ -64,8 +63,8 @@ ENDPOINT(todo) {
 
     varlist = db_records_to_loop(varlist, "todos", NULL);
 
-    sds template_path = sdsnew(cwf_vars->document_root);
-    template_path = sdscat(template_path, "todo_index.tmpl");
+    sds template_path = sdsnew(cwf_vars->templates_path);
+    template_path = sdscat(template_path, "index.tmpl");
 
     // The varlist is freed in the render_template function
     sds response = render_template(varlist, template_path);

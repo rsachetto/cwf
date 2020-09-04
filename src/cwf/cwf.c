@@ -22,59 +22,63 @@ static void decode_query(request_item **v, const char *query) {
     name = value = 0;
     for(i = k = done = 0; done == 0; i++) {
         switch(query[i]) {
-            case '=':
-                if(name != 0) {
-                    break; /* treat extraneous '=' as data */
-                }
-                if(name == 0 && k > 0) {
-                    name = buf;
-                    buf[k++] = 0;
-                    value = buf + k;
-                }
+        case '=':
+            if(name != 0) {
+                break; /* treat extraneous '=' as data */
+            }
+            if(name == 0 && k > 0) {
+                name = buf;
+                buf[k++] = 0;
+                value = buf + k;
+            }
+            continue;
+
+        case 0:
+            done = 1; /* fall through */
+
+        case '&':
+            buf[k] = 0;
+            if(name == 0 && k > 0) {
+                name = buf;
+                value = buf + k;
+            }
+            if(name != 0) {
+                string_array values = shget(*v, name);
+                arrput(values, strdup(value));
+                shput(*v, strdup(name), values);
+            }
+            k = 0;
+            name = value = 0;
+            continue;
+
+        case '+':
+            buf[k++] = ' ';
+            continue;
+
+        case '%':
+            if((L = CGI_hex(query[i + 1])) >= 0 && (R = CGI_hex(query[i + 2])) >= 0) {
+                buf[k++] = (L << 4) + R;
+                i += 2;
                 continue;
-
-            case 0:
-                done = 1; /* fall through */
-
-            case '&':
-                buf[k] = 0;
-                if(name == 0 && k > 0) {
-                    name = buf;
-                    value = buf + k;
-                }
-                if(name != 0) {
-                    string_array values = shget(*v, name);
-                    arrput(values, strdup(value));
-                    shput(*v, strdup(name), values);
-                }
-                k = 0;
-                name = value = 0;
-                continue;
-
-            case '+':
-                buf[k++] = ' ';
-                continue;
-
-            case '%':
-                if((L = CGI_hex(query[i + 1])) >= 0 && (R = CGI_hex(query[i + 2])) >= 0) {
-                    buf[k++] = (L << 4) + R;
-                    i += 2;
-                    continue;
-                }
-                break; /* treat extraneous '%' as data */
+            }
+            break; /* treat extraneous '%' as data */
         }
         buf[k++] = query[i];
     }
     free(buf);
 }
 
-static void get_post(request_item **v, int len) {
+static void get_post(cwf_request *r, int len, char *type) {
     char *buf;
 
     buf = (char *)malloc(len + 1);
     if(fread(buf, 1, len, stdin) == len) {
         buf[len] = 0;
-        decode_query(v, buf);
+        if(strncmp(type, "urlencoded", 10) == 0) {
+            decode_query(&(r->urlencoded_data), buf);
+        } else if(strncmp(type, "json", 4) == 0) {
+            r->json_data = json_parse((json_char *)buf, len);
+        }
     }
     free(buf);
 }
@@ -82,7 +86,8 @@ static void get_post(request_item **v, int len) {
 static bool is_int(char *int_char) {
     size_t len = strlen(int_char);
 
-    if(len == 0) return false;
+    if(len == 0)
+        return false;
 
     for(int i = 0; i < len; ++i) {
         if(!isdigit(int_char[i])) {
@@ -96,7 +101,8 @@ static bool is_int(char *int_char) {
 static bool is_float(char *float_char) {
     size_t len = strlen(float_char);
 
-    if(len == 0) return false;
+    if(len == 0)
+        return false;
 
     bool dot_found = false;
 
@@ -104,8 +110,7 @@ static bool is_float(char *float_char) {
         if(float_char[i] == '.') {
             if(!dot_found) {
                 dot_found = true;
-            }
-            else {
+            } else {
                 return false;
             }
             continue;
@@ -133,7 +138,8 @@ cwf_cookie *new_cookie(char *name, char *value) {
 }
 
 void free_cookie(cwf_cookie *cookie) {
-    if(!cookie) return;
+    if(!cookie)
+        return;
     free(cookie->name);
     free(cookie->value);
     free(cookie->path);
@@ -159,9 +165,9 @@ cwf_cookie *get_cookie() {
             v->name = strdup(cookie_data[0]);
             v->value = strdup(cookie_data[1]);
         } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Expires", 7)) {
-            v->expires = (int) strtol(cookie_data[1], NULL, 10);
+            v->expires = (int)strtol(cookie_data[1], NULL, 10);
         } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Max-Age", 7)) {
-            v->max_age = (int) strtol(cookie_data[1], NULL, 10);
+            v->max_age = (int)strtol(cookie_data[1], NULL, 10);
         } else if(STRINGS_MATCH_NO_CASE_N(cookie_data[0], "Domain", 6)) {
             v->domain = strdup(cookie_data[1]);
 
@@ -203,15 +209,17 @@ http_header new_empty_header() {
 }
 
 void add_custom_header(const char *name, const char *value, http_header *header) {
-    if(value) shput(*header, name, strdup(value));
+    if(value)
+        shput(*header, name, strdup(value));
 }
 
 void add_cookie_to_header(cwf_cookie *c, http_header *header) {
-    if(!c || !c->name || !c->value) return;
+    if(!c || !c->name || !c->value)
+        return;
 
     size_t cookie_str_size = strlen(c->name);
     cookie_str_size += strlen(c->value);
-    cookie_str_size += 2;  // = and ;
+    cookie_str_size += 2; // = and ;
 
     sds cookie_str = sdsnew(c->name);
 
@@ -286,8 +294,7 @@ void cwf_generate_default_404_header(http_header *headers) {
     add_custom_header("Content-type", "text/html", headers);
 }
 
-endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING,
-                                     endpoint_config_item *endpoints_cfg) {
+endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
     char *str = (char *)REQUEST_URI;
 
     endpoint_config *it;
@@ -329,34 +336,30 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
                     if(num_params < expected_params) {
                         url_params = it->params[num_params];
                     } else {
-                        sprintf(err, "Number of parameters exceed the configured number of parameters (%d).\n",
-                                expected_params);
+                        sprintf(err, "Number of parameters exceed the configured number of parameters (%d).\n", expected_params);
                         concat_error_msg(&(it->error), err);
                         break;
                     }
 
                     switch(url_params.type) {
-                        case STRING:
-                            break;
-                        case INT:
-                            if(!is_int(pch)) {
-                                sprintf(err, "%s is configured to be an integer but %s is not a valid integer.\n",
-                                        url_params.name, pch);
-                                concat_error_msg(&(it->error), err);
-                            }
-                            break;
-                        case FLOAT:
-                            if(!is_float(pch)) {
-                                sprintf(err, "%s is configured to be a float but %s is not a valid float.\n",
-                                        url_params.name, pch);
-                                concat_error_msg(&(it->error), err);
-                            }
-                            break;
-                        default:
-                            sprintf(err, "%s is configured to an invalid type. Valid types are i, s or f.\n",
-                                    url_params.name);
+                    case STRING:
+                        break;
+                    case INT:
+                        if(!is_int(pch)) {
+                            sprintf(err, "%s is configured to be an integer but %s is not a valid integer.\n", url_params.name, pch);
                             concat_error_msg(&(it->error), err);
-                            break;
+                        }
+                        break;
+                    case FLOAT:
+                        if(!is_float(pch)) {
+                            sprintf(err, "%s is configured to be a float but %s is not a valid float.\n", url_params.name, pch);
+                            concat_error_msg(&(it->error), err);
+                        }
+                        break;
+                    default:
+                        sprintf(err, "%s is configured to an invalid type. Valid types are i, s or f.\n", url_params.name);
+                        concat_error_msg(&(it->error), err);
+                        break;
                     }
 
                     it->params[num_params].value = strdup(pch);
@@ -475,21 +478,20 @@ cwf_request *new_from_env_vars() {
         req->data_len = shlen(req->urlencoded_data);
     } else if(IS_REQ_POST(req)) {
         const char *env;
-        int len;
+        int len = 0;
 
-        if((env = getenv("CONTENT_TYPE")) != 0 && strncasecmp(env, "application/x-www-form-urlencoded", 33) == 0 &&
-           (env = getenv("CONTENT_LENGTH")) != 0 && (len = (int)strtol(env, NULL, 10)) > 0) {
-            get_post(&req->urlencoded_data, len);
+        if((env = getenv("CONTENT_TYPE")) != 0 && strncasecmp(env, "application/x-www-form-urlencoded", 33) == 0 && (env = getenv("CONTENT_LENGTH")) != 0 &&
+           (len = (int)strtol(env, NULL, 10)) > 0) {
             req->data_type = "urlencoded";
-            req->data_len = shlen(req->urlencoded_data);
-        } else if((env = getenv("CONTENT_TYPE")) != 0 && strncasecmp(env, "application/json", 16) == 0 &&
-                  (env = getenv("CONTENT_LENGTH")) != 0 && (len = (int)strtol(env, NULL, 10)) > 0) {
-            //TODO: handle json
+        } else if((env = getenv("CONTENT_TYPE")) != 0 && strncasecmp(env, "application/json", 16) == 0 && (env = getenv("CONTENT_LENGTH")) != 0 &&
+                  (len = (int)strtol(env, NULL, 10)) > 0) {
             req->data_type = "json";
-
-        } else {  // multipart
+        } else { // multipart
             // TODO handle multpart input (get from liccgi)
         }
+
+        get_post(req, len, req->data_type);
+        req->data_len = len;
     }
 
     return req;
@@ -544,7 +546,8 @@ sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_h
 }
 
 void cwf_open_database(cwf_vars *vars) {
-    if(vars->database == NULL) vars->database = calloc(1, sizeof(struct cwf_database_t));
+    if(vars->database == NULL)
+        vars->database = calloc(1, sizeof(struct cwf_database_t));
 
     int rc = sqlite3_open(vars->database_path, &(vars->database->db));
 
@@ -615,7 +618,8 @@ TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value
         char *name = strdup(req->urlencoded_data[i].key);
         char *value = NULL;
 
-        if(tmp) value = tmp[0];
+        if(tmp)
+            value = tmp[0];
 
         if(modify) {
             modify(&name, &value);
@@ -648,8 +652,7 @@ TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_database *data
     return varlist;
 }
 
-TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *database, char *loop_name,
-                                     modify_db_name_value_fn *modify) {
+TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *database, char *loop_name, modify_db_name_value_fn *modify) {
     TMPL_loop *loop = 0;
 
     for(int i = 0; i < database->num_records; i++) {
@@ -659,7 +662,8 @@ TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *databa
             char *name = strdup(database->records[i][j].key);
             char *value = NULL;
 
-            if(database->records[i][j].value) value = strdup(database->records[i][j].value);
+            if(database->records[i][j].value)
+                value = strdup(database->records[i][j].value);
 
             if(modify) {
                 modify(&name, &value);
@@ -705,11 +709,14 @@ char_array strip_html_tags(const char *buf) {
 
 static bool simpleSHA256(void *input, unsigned long length, unsigned char *md) {
     SHA256_CTX context;
-    if(!SHA256_Init(&context)) return false;
+    if(!SHA256_Init(&context))
+        return false;
 
-    if(!SHA256_Update(&context, (unsigned char *)input, length)) return false;
+    if(!SHA256_Update(&context, (unsigned char *)input, length))
+        return false;
 
-    if(!SHA256_Final(md, &context)) return false;
+    if(!SHA256_Final(md, &context))
+        return false;
 
     return true;
 }
@@ -726,7 +733,8 @@ static char *generate_session_id() {
     size_t len = strlen(b64);
 
     for(size_t i = 0; i < len; i++) {
-        if(b64[i] == '/') b64[i] = '_';
+        if(b64[i] == '/')
+            b64[i] = '_';
     }
 
     return (b64);
@@ -785,7 +793,8 @@ static void execute_query_for_session(const char *query, sqlite3 *db, record **d
 
 #define SESSION_NAME_TEMPLATE "%s/session_%s.session"
 void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path) {
-    // TODO section needs to have a lock to access the session file. I thing we will need a semaphore here to handle simultaneous connections. If a section is readonly we don't need to bother with the lockfile
+    // TODO section needs to have a lock to access the session file. I thing we will need a semaphore here to handle simultaneous connections. If a section is
+    // readonly we don't need to bother with the lockfile
     if(*session == NULL) {
         *session = calloc(1, sizeof(session));
 
@@ -811,8 +820,7 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
 
             // TODO We only need to create a new file for the session
             sqlite3 *session_file;
-            int rc =
-                sqlite3_open_v2(session_file_name, &session_file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, NULL);
+            int rc = sqlite3_open_v2(session_file_name, &session_file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, NULL);
 
             // TODO handle session errors
             if(rc != SQLITE_OK) {
@@ -899,7 +907,8 @@ void cwf_session_destroy(cwf_session **session, http_header *headers, char *sess
 }
 
 void cwf_save_session(cwf_session *session) {
-    if(!session) return;
+    if(!session)
+        return;
 
     sqlite3 *session_file;
     int rc = sqlite3_open(session->db_filename, &session_file);
@@ -914,8 +923,7 @@ void cwf_save_session(cwf_session *session) {
     sds query = sdsempty();
 
     for(int i = 0; i < len; i++) {
-        query = sdscatprintf(query, "REPLACE INTO session_data (key, value) VALUES('%s', '%s');", session->data[i].key,
-                             session->data[i].value);
+        query = sdscatprintf(query, "REPLACE INTO session_data (key, value) VALUES('%s', '%s');", session->data[i].key, session->data[i].value);
     }
 
     char *error;
