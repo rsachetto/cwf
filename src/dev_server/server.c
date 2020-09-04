@@ -1,3 +1,5 @@
+#include "../3dparty/sds/sds.h"
+#include "mimetypes.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -7,12 +9,10 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <sys/time.h>
-#include "../3dparty/sds/sds.h"
-#include "mimetypes.h"
 
 #define STB_DS_IMPLEMENTATION
 #include "../3dparty/stb/stb_ds.h"
@@ -34,15 +34,16 @@ void respond(int);
 bool verbose = false;
 
 struct mime_type {
-    char *key;    // file extension
-    char *value;  // mime-type
+    char *key;   // file extension
+    char *value; // mime-type
 };
 
 struct mime_type *mime_types;
 
 const char *get_filename_ext(const char *filename) {
     const char *dot = strrchr(filename, '.');
-    if(!dot || dot == filename) return "";
+    if(!dot || dot == filename)
+        return "";
     return dot + 1;
 }
 
@@ -75,46 +76,43 @@ int main(int argc, char *argv[]) {
     // Parsing the command line arguments
     while((c = getopt(argc, argv, "p:r:v")) != -1) {
         switch(c) {
-            case 'r': {
-                int arglen = strlen(optarg);
-                if(optarg[arglen - 1] != '/') {
-                    ROOT = malloc(arglen + 2);
-                    strcpy(ROOT, optarg);
-                    ROOT[arglen] = '/';
-                    ROOT[arglen + 1] = '\0';
-                } else {
-                    ROOT = strdup(optarg);
-                }
-            } break;
-            case 'p':
-                port = strtol(optarg, NULL, 10);
-                if(port < 1 || port > 65535) {
-                    fprintf(stderr, "Invalid port number %d. Valid values are from 1 to 65535\n", port);
+        case 'r': {
+            int arglen = strlen(optarg);
+            if(optarg[arglen - 1] != '/') {
+                ROOT = malloc(arglen + 2);
+                strcpy(ROOT, optarg);
+                ROOT[arglen] = '/';
+                ROOT[arglen + 1] = '\0';
+            } else {
+                ROOT = strdup(optarg);
+            }
+        } break;
+        case 'p':
+            port = strtol(optarg, NULL, 10);
+            if(port < 1 || port > 65535) {
+                fprintf(stderr, "Invalid port number %d. Valid values are from 1 to 65535\n", port);
+                exit(1);
+            } else if(port < 1024) {
+                if(uid > 0 && uid == euid) {
+                    fprintf(stderr, "Invalid port number %d. You need to be root to open a port < 1024", port);
                     exit(1);
-                } else if(port < 1024) {
-                    if(uid > 0 && uid == euid) {
-                        fprintf(stderr, "Invalid port number %d. You need to be root to open a port < 1024", port);
-                        exit(1);
-                    }
                 }
-                break;
-            case 'v':
-                verbose = true;
-            case '?':
-                fprintf(stderr, "Usage: %s -p PORT -r ROOT\n", argv[0]);
-                exit(1);
-            default:
-                exit(1);
+            }
+            break;
+        case 'v':
+            verbose = true;
+        case '?':
+            fprintf(stderr, "Usage: %s -p PORT -r ROOT\n", argv[0]);
+            exit(1);
+        default:
+            exit(1);
         }
     }
 
     load_mime_types();
     start_server(port);
 
-    printf("Server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m",
-           ROOT, "\033[0m");
-
-
+    printf("Server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
 
     while(1) {
         addrlen = sizeof(clientaddr);
@@ -189,8 +187,7 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
     }
 
     int method_uri_version_count;
-    sds *method_uri_version =
-        sdssplitlen(request_headers[0], sdslen(request_headers[0]), " ", 1, &method_uri_version_count);
+    sds *method_uri_version = sdssplitlen(request_headers[0], sdslen(request_headers[0]), " ", 1, &method_uri_version_count);
 
     char *method = method_uri_version[0];
     char *uri = method_uri_version[1];
@@ -264,7 +261,8 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
         close(CHILD_READ);
         close(CHILD_WRITE);
 
-        if(request_content) write(PARENT_WRITE, request_content, sdslen(request_content));
+        if(request_content)
+            write(PARENT_WRITE, request_content, sdslen(request_content));
 
         char buffer[2] = {0};
 
@@ -289,9 +287,10 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
                 int len = sdslen(response_from_child);
 
                 if(len >= 4) {
-                    headers_end_found = (response_from_child[len - 4] == '\r' && response_from_child[len - 3] == '\n' &&
-                                         response_from_child[len - 2] == '\r' && response_from_child[len - 1] == '\n');
-                    if(headers_end_found) break;
+                    headers_end_found = (response_from_child[len - 4] == '\r' && response_from_child[len - 3] == '\n' && response_from_child[len - 2] == '\r' &&
+                                         response_from_child[len - 1] == '\n');
+                    if(headers_end_found)
+                        break;
                 }
             }
         }
@@ -307,8 +306,7 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
             send_header(socket, HEADER_INTERNAL_SERVER_ERROR, true);
         } else {
             int lines_count;
-            sds *response_lines =
-                sdssplitlen(response_from_child, sdslen(response_from_child), "\r\n", strlen("\r\n"), &lines_count);
+            sds *response_lines = sdssplitlen(response_from_child, sdslen(response_from_child), "\r\n", strlen("\r\n"), &lines_count);
             // The last 2 lines are empty strings
             lines_count -= 2;
 
@@ -380,7 +378,8 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
                 }
             }
 
-            if(verbose) printf("%s\n", response_headers);
+            if(verbose)
+                printf("%s\n", response_headers);
 
             // TODO: maybe we can send the headers withou having to make a string buffer
             size_t content_length = sdslen(response_content);
@@ -410,7 +409,7 @@ void execute_cgi(int socket, sds *request_headers, sds request_content, int num_
 void respond(int client_socket) {
 
     struct timeval start, end;
-    long secs_used,micros_used;
+    long secs_used, micros_used;
 
     gettimeofday(&start, NULL);
 
@@ -435,22 +434,23 @@ void respond(int client_socket) {
         request = sdscat(request, mesg);
         int len = sdslen(request);
         if(len >= 4) {
-            bool end = (request[len - 4] == '\r' && request[len - 3] == '\n' && request[len - 2] == '\r' &&
-                        request[len - 1] == '\n');
-            if(end) break;
+            bool end = (request[len - 4] == '\r' && request[len - 3] == '\n' && request[len - 2] == '\r' && request[len - 1] == '\n');
+            if(end)
+                break;
         }
     }
 
     bool error = false;
 
-    if(rcvd < 0) {  // receive error
+    if(rcvd < 0) { // receive error
         fprintf(stderr, ("recv() error\n"));
         error = true;
-    } else if(rcvd == 0) {  // receive socket closed
+    } else if(rcvd == 0) { // receive socket closed
         fprintf(stderr, "Client disconnected upexpectedly.\n");
         error = true;
     } else {
-        if(verbose) printf("%s\n", request);
+        if(verbose)
+            printf("%s\n", request);
 
         request_lines = sdssplitlen(request, sdslen(request), "\r\n", strlen("\r\n"), &lines_count);
 
@@ -467,7 +467,7 @@ void respond(int client_socket) {
                 send_header(client_socket, HEADER_BAD_REQUEST, true);
             } else {
                 if(strncmp(method, "GET", 3) == 0) {
-                    if((strncmp(uri, "/static/", 8) == 0) || (strncmp(uri, "/media/", 7) == 0)) {
+                    if((strncmp(uri, "/static/", 8) == 0) || (strncmp(uri, "/media/", 7) == 0) || (strncmp(uri, "/favicon.ico", 11) == 0)) {
                         path = sdscat(path, uri);
 
                         if((fd = open(path, O_RDONLY)) != -1) {
@@ -524,12 +524,13 @@ void respond(int client_socket) {
                         received_data += rcvd;
                     }
 
-                    if(rcvd < 0) {  // receive error
+                    if(rcvd < 0) { // receive error
                         fprintf(stderr, ("recv() error\n"));
-                    } else if(rcvd == 0) {  // receive socket closed
+                    } else if(rcvd == 0) { // receive socket closed
                         fprintf(stderr, "Client disconnected upexpectedly.\n");
                     } else {
-                        if(verbose) printf("%s\n", request_content);
+                        if(verbose)
+                            printf("%s\n", request_content);
                         execute_cgi(client_socket, request_lines, request_content, lines_count);
                     }
 
@@ -540,13 +541,13 @@ void respond(int client_socket) {
         }
     }
     // Closing SOCKET
-    shutdown(client_socket, SHUT_RDWR);  // All further send and recieve operations are DISABLED...
+    shutdown(client_socket, SHUT_RDWR); // All further send and recieve operations are DISABLED...
     close(client_socket);
 
     gettimeofday(&end, NULL);
 
-    secs_used=(end.tv_sec - start.tv_sec); //avoid overflow by subtracting first
-    micros_used= ((secs_used*1000000) + end.tv_usec) - (start.tv_usec);
+    secs_used = (end.tv_sec - start.tv_sec); // avoid overflow by subtracting first
+    micros_used = ((secs_used * 1000000) + end.tv_usec) - (start.tv_usec);
     if(!error)
-        fprintf(stderr, "Respond to request %s %s took %ld ms\n", method_uri_version[0], method_uri_version[1], micros_used/1000);
+        fprintf(stderr, "Respond to request %s %s took %ld ms\n", method_uri_version[0], method_uri_version[1], micros_used / 1000);
 }

@@ -10,13 +10,22 @@ CRYPT = crypt.o
 
 CFLAGS = -fPIC $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
 
-OBJS = cwf.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o sqlite3.o sds.o
+OBJS = cwf.o session.o http.o cookie.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o sqlite3.o sds.o
 libcwf.a: $(OBJS) $(CRYPT)
 	ar r libcwf.a $(OBJS) $(CRYPT)
 	ranlib libcwf.a
 
 cwf.o: cwf/cwf.c cwf/cwf.h 
 	gcc $(CFLAGS) -c cwf/cwf.c
+
+cookie.o: cwf/cookie.c cwf/cookie.h
+	gcc $(CFLAGS) -c cwf/cookie.c
+
+session.o: cwf/session.o cwf/session.h
+	gcc $(CFLAGS) -c cwf/session.c
+
+http.o: cwf/http.o cwf/http.h
+	gcc $(CFLAGS) -c cwf/http.c
 
 ini_parse.o: ini_parse/ini_parse.c ini_parse/ini_parse.h
 	gcc $(CFLAGS) -c ini_parse/ini_parse.c

@@ -10,21 +10,72 @@
 #include "../3dparty/sds/sds.h"
 #include "../3dparty/sqlite/sqlite3.h"
 
+#include "common_data_structures.h"
+#include "cookie.h"
+#include "http.h"
+#include "session.h"
+#include "string_macros.h"
+
 #define IS_REQ_GET(request) request->method ? (strcmp(request->method, "GET") == 0) : false
 #define IS_REQ_POST(request) request->method ? (strcmp(request->method, "POST") == 0) : false
 
 #define IS_GET() IS_REQ_GET(cwf_vars->request)
 #define IS_POST() IS_REQ_POST(cwf_vars->request)
 
-#define STRINGS_MATCH(a, b) strcmp((a), (b)) == 0
-#define STRINGS_MATCH_NO_CASE_N(a, b, n) strncasecmp((a), (b), (n)) == 0
+#define header(key, value) add_custom_header((key), (value), &(cwf_vars->headers))
 
-#define ENDSWITH(s, c) (s)[strlen((s)) - 1] == (c)
+#define session_start() cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
+#define session_destroy() cwf_session_destroy(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
+#define SESSION_GET(key) cwf_session_get(cwf_vars->session, (key))
+#define SESSION_PUT(key, value) cwf_session_put(cwf_vars->session, (key), (value))
+
+#define generate_default_404_header() cwf_generate_default_404_header(&(cwf_vars->headers))
+
+#define redirect(url)                                                                                                                                          \
+    cwf_redirect((url), &(cwf_vars->headers));                                                                                                                 \
+    return NULL;
+
+#define generate_simple_404(format, ...) simple_404_page(cwf_vars, format, __VA_ARGS__)
+
+#define ENDPOINT(name) sds name(cwf_vars *cwf_vars, endpoint_config *config)
+
+#define SERVER(key) cwf_server_vars(cwf_vars->request, (key))
+
+#define GET(key) cwf_get_vars(cwf_vars->request, (key)) ? cwf_get_vars(cwf_vars->request, (key))[0] : NULL
+#define GET_ARRAY(key) cwf_get_vars(cwf_vars->request, (key))
+
+#define POST(key) cwf_post_vars(cwf_vars->request, (key)) ? cwf_post_vars(cwf_vars->request, (key))[0] : NULL
+#define POST_ARRAY(key) cwf_post_vars(cwf_vars->request, (key))
+
+#define DUMP_REQUEST_VARS()                                                                                                                                    \
+    generate_default_404_header();                                                                                                                             \
+    return cwf_dump_request_vars(cwf_vars->request)
+
+#define render_template(varlist, path) cwf_render_template((varlist), (path), &(cwf_vars->headers))
+
+#define request_to_varlist(varlist, modify_fn) cwf_request_to_varlist((varlist), (modify_fn), cwf_vars->request)
+
+#define db_record_to_varlist(varlist, modify) cwf_db_record_to_varlist((varlist), cwf_vars->database, (modify))
+
+#define db_records_to_loop(varlist, loop_name, modify) cwf_db_records_to_loop((varlist), cwf_vars->database, (loop_name), (modify))
+
+#define open_database() cwf_open_database(cwf_vars);
+#define open_database_or_return_404()                                                                                                                          \
+    open_database();                                                                                                                                           \
+    if(cwf_vars->database->error) {                                                                                                                            \
+        return generate_simple_404("Database error: %s", cwf_vars->database->error);                                                                           \
+    }
+
+#define close_database() cwf_close_database(cwf_vars);
+
+#define execute_query(query) cwf_execute_query((query), cwf_vars->database)
+#define execute_query_or_return_404(query)                                                                                                                     \
+    execute_query((query));                                                                                                                                    \
+    if(cwf_vars->database->error) {                                                                                                                            \
+        return generate_simple_404("Database error: %s", cwf_vars->database->error);                                                                           \
+    }
 
 typedef enum { INT, STRING, FLOAT, INVALID } parameter_type;
-
-typedef char *char_array;
-typedef char **string_array;
 
 typedef struct {
     char *name;
@@ -43,31 +94,12 @@ typedef struct endpoint_config_item_t {
     endpoint_config *value;
 } endpoint_config_item;
 
-typedef struct record_t {
-    char *key;
-    char *value;
-} record;
-
 typedef struct cwf_database_t {
     char *error;
     sqlite3 *db;
-    record **records;
+    string_hash *records;
     unsigned int num_records;
 } cwf_database;
-
-typedef struct cookie_t {
-    char *name;
-    char *value;
-    int expires;
-    int max_age;
-    char *domain;
-    char *path;
-    bool secure;
-    bool http_only;
-    char *same_site;
-} cwf_cookie;
-
-typedef record *http_header;
 
 typedef struct request_item_t {
     char *key;
@@ -91,12 +123,6 @@ typedef struct cwf_request_t {
     };
 } cwf_request;
 
-typedef struct cwf_session_t {
-    cwf_cookie *cookie;
-    record *data;
-    char *db_filename;
-} cwf_session;
-
 typedef struct cwf_vars_t {
     cwf_request *request;
     cwf_session *session;
@@ -111,7 +137,6 @@ typedef struct cwf_vars_t {
     bool print_debug_info;
 } cwf_vars;
 
-#define ENDPOINT(name) sds name(cwf_vars *cwf_vars, endpoint_config *config)
 typedef ENDPOINT(endpoint_fn);
 
 typedef void modify_db_name_value_fn(char **name, char **value);
@@ -119,52 +144,21 @@ typedef void modify_db_name_value_fn(char **name, char **value);
 cwf_request *new_empty_request();
 cwf_request *new_from_env_vars();
 
-http_header new_empty_header();
-
-#define header(key, value) add_custom_header((key), (value), &(cwf_vars->headers))
-void add_custom_header(const char *name, const char *value, http_header *header);
-
-void write_http_headers(http_header header);
-
-#define SERVER(key) cwf_server_vars(cwf_vars->request, (key))
 char *cwf_server_vars(cwf_request *req, char *key);
 
-#define GET(key) cwf_get_vars(cwf_vars->request, (key)) ? cwf_get_vars(cwf_vars->request, (key))[0] : NULL
-#define GET_ARRAY(key) cwf_get_vars(cwf_vars->request, (key))
 string_array cwf_get_vars(cwf_request *req, char *key);
 
-#define POST(key) cwf_post_vars(cwf_vars->request, (key)) ? cwf_post_vars(cwf_vars->request, (key))[0] : NULL
-#define POST_ARRAY(key) cwf_post_vars(cwf_vars->request, (key))
 string_array cwf_post_vars(cwf_request *req, char *key);
 
-#define DUMP_REQUEST_VARS()        \
-    generate_default_404_header(); \
-    return cwf_dump_request_vars(cwf_vars->request)
 sds cwf_dump_request_vars(cwf_request *req);
 
-#define SESSION_GET(key) cwf_session_get(cwf_vars->session, (key))
-char *cwf_session_get(cwf_session *session, const char *key);
-
-#define SESSION_PUT(key, value) cwf_session_put(cwf_vars->session, (key), (value))
-void cwf_session_put(cwf_session *session, const char *key, const char *value);
-
-#define render_template(varlist, path) cwf_render_template((varlist), (path), &(cwf_vars->headers))
 sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_header *headers);
 
-#define request_to_varlist(varlist, modify_fn) cwf_request_to_varlist((varlist), (modify_fn), cwf_vars->request)
 TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value_fn *modify, cwf_request *req);
 
-#define db_record_to_varlist(varlist, modify) cwf_db_record_to_varlist((varlist), cwf_vars->database, (modify))
 TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_database *database, modify_db_name_value_fn *modify);
 
-#define db_records_to_loop(varlist, loop_name, modify) \
-    cwf_db_records_to_loop((varlist), cwf_vars->database, (loop_name), (modify))
-TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *database, char *loop_name,
-                                     modify_db_name_value_fn *f);
-
-cwf_cookie *get_cookie();
-cwf_cookie *new_cookie(char *name, char *value);
-void add_cookie_to_header(cwf_cookie *c, http_header *header);
+TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *database, char *loop_name, modify_db_name_value_fn *f);
 
 endpoint_config *new_endpoint_config();
 endpoint_config_item *new_endpoint_config_hash();
@@ -172,46 +166,16 @@ void free_endpoint_config_hash(endpoint_config_item *hash);
 endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *configs);
 void add_params_to_request(cwf_request *req, url_params *params);
 
-#define open_database() cwf_open_database(cwf_vars);
-#define open_database_or_return_404()                                                \
-    open_database();                                                                 \
-    if(cwf_vars->database->error) {                                                  \
-        return generate_simple_404("Database error: %s", cwf_vars->database->error); \
-    }
 void cwf_open_database(cwf_vars *vars);
 
-#define close_database() cwf_close_database(cwf_vars);
 void cwf_close_database(cwf_vars *vars);
 
-#define execute_query(query) cwf_execute_query((query), cwf_vars->database)
-#define execute_query_or_return_404(query)                                           \
-    execute_query((query));                                                          \
-    if(cwf_vars->database->error) {                                                  \
-        return generate_simple_404("Database error: %s", cwf_vars->database->error); \
-    }
 void cwf_execute_query(const char *query, cwf_database *db);
 
-int get_num_columns(record *r);
+int get_num_columns(string_hash r);
 
 char_array strip_html_tags(const char *buf);
 
-#define generate_default_404_header() cwf_generate_default_404_header(&(cwf_vars->headers))
-void cwf_generate_default_404_header(http_header *headers);
-
-#define redirect(url)                          \
-    cwf_redirect((url), &(cwf_vars->headers)); \
-    return NULL;
-void cwf_redirect(const char *url, http_header *headers);
-
-#define session_start() cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
-void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path);
-
-#define session_destroy() cwf_session_destroy(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
-void cwf_session_destroy(cwf_session **session, http_header *headers, char *session_files_path);
-
-void cwf_save_session(cwf_session *session);
-
-#define generate_simple_404(format, ...) simple_404_page(cwf_vars, format, __VA_ARGS__)
 sds simple_404_page(cwf_vars *cwf_vars, char *format, ...);
 
 void free_cwf_vars(cwf_vars *vars);
