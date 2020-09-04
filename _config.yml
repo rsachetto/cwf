@@ -2,4 +2,4 @@ title: CWF
 description: Web framework written in C
 
 theme: jekyll-theme-minimal
-logo: [Location of the logo]
+logo: https://raw.githubusercontent.com/rsachetto/cwf/gh-pages/logo_size.jpg
