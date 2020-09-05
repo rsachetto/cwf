@@ -11,6 +11,7 @@ release_set:
  
 debug_set:
 	$(eval OPT_FLAGS=-g3)
+	$(eval ENABLE_BACKTRACE=-DENABLE_BACKTRACE)
 
 debug_cgi_set: 
 	$(eval DEBUG_CGI=-DDEBUG_CGI)
@@ -21,7 +22,7 @@ todo: cwf
 
 cwf:
 	cd ../src/ &&  $(MAKE) EXTRA_C_FLAGS=${OPT_FLAGS}  && cd -
-	gcc ${OPT_FLAGS} ${DEBUG_CGI} ../src/main.c ../src/libcwf.a -o cwf.cgi -ldl -lpthread -lssl -lcrypto -lm
+	gcc ${OPT_FLAGS} ${DEBUG_CGI} ${ENABLE_BACKTRACE} ../src/main.c ../src/libcwf.a -o cwf.cgi -ldl -lpthread -lssl -lcrypto -lm
 
 clean:
 	cd ../src/ &&  $(MAKE) clean  && cd -

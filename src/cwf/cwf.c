@@ -425,7 +425,7 @@ static int sqlite_callback(void *cwf_db, int num_results, char **column_values, 
     if(num_results) {
         cwf_database *database = (cwf_database *)cwf_db;
 
-        string_hash line;
+        string_hash line = NULL;
         shdefault(line, NULL);
         sh_new_arena(line);
 

@@ -5,7 +5,6 @@ OPENSSL_INCLUDE = /usr/include
 
 # To build without openssl comment out the "CRYPT =" line
 
-
 CRYPT = crypt.o
 
 CFLAGS = -fPIC $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)

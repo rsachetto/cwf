@@ -50,7 +50,6 @@ ENDPOINT(todo) {
 
     execute_query_or_return_404("SELECT * FROM todolist_category ORDER BY name ASC;");
 
-
     TMPL_varlist *varlist = 0;
     varlist = db_records_to_loop(varlist, "categories", NULL);
 
