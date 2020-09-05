@@ -8,7 +8,6 @@
 #include <sys/time.h>
 
 ENDPOINT(todo) {
-
     open_database_or_return_404();
 
     if(IS_POST()) {
@@ -53,12 +52,11 @@ ENDPOINT(todo) {
     TMPL_varlist *varlist = 0;
     varlist = db_records_to_loop(varlist, "categories", NULL);
 
-    execute_query_or_return_404(
-        "SELECT todolist_todolist.id, todolist_todolist.title, todolist_todolist.created, "
-        "todolist_todolist.due_date, "
-        "todolist_category.name FROM todolist_todolist LEFT JOIN todolist_category ON "
-        "todolist_todolist.category_id = "
-        "todolist_category.id;");
+    execute_query_or_return_404("SELECT todolist_todolist.id, todolist_todolist.title, todolist_todolist.created, "
+                                "todolist_todolist.due_date, "
+                                "todolist_category.name FROM todolist_todolist LEFT JOIN todolist_category ON "
+                                "todolist_todolist.category_id = "
+                                "todolist_category.id;");
 
     varlist = db_records_to_loop(varlist, "todos", NULL);
 
@@ -84,7 +82,8 @@ ENDPOINT(cgi_info) {
 
     for(int i = 0; i < request->server_data_len; i++) {
         char *tmp = request->server_data[i].value;
-        if(tmp) response = sdscatfmt(response, "%s %s\n", request->server_data[i].key, tmp);
+        if(tmp)
+            response = sdscatfmt(response, "%s %s\n", request->server_data[i].key, tmp);
     }
 
     if(strcmp(request->data_type, "urlencoded") == 0) {

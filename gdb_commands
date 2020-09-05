@@ -4,4 +4,3 @@ finish
 set is_waiting = 0
 finish
 set breakpoint pending on
-b modify_value
