@@ -11,7 +11,7 @@ $ cd cwf
 $ make
 $ cd todo_list
 $ make 
-$ ../bin/server -p 8080 -s . 
+$ ../bin/server -p 8080 -r . 
 ```
 
 Open your brownser and point to http://localhost:8080
