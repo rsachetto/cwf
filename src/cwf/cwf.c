@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #define STB_DS_IMPLEMENTATION
 #include "../3dparty/stb/stb_ds.h"
@@ -600,9 +599,6 @@ static void free_cwf_request(cwf_request *request) {
 }
 
 void free_cwf_vars(cwf_vars *vars) {
-    // cwf_request *request;
-    // cwf_session *session;
-    // http_header headers;
     free(vars->endpoints_lib_path);
     free(vars->endpoints_config_path);
     free(vars->database_path);

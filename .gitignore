@@ -55,7 +55,7 @@ cwf.cgi
 build.sh
 deploy.sh
 example_site/blog.sqlite.local
-bin/
+bin/server
 *.session
 .idea/
 blog/

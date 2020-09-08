@@ -1,0 +1,118 @@
+#!/bin/bash
+
+ADD_EXAMPLE_MAKEFILE() {
+
+	app_name=$1
+
+cat << 'EOF' > "${app_name}/Makefile"
+PHONY = release_set debug_set debug_cgi_set
+
+all: release
+
+debug: debug_set todo
+release: release_set todo
+debug_cgi: debug_cgi_set todo
+
+release_set:
+	$(eval OPT_FLAGS=-O3)
+ 
+debug_set:
+	$(eval OPT_FLAGS=-g3)
+
+debug_cgi_set: 
+	$(eval DEBUG_CGI=-DDEBUG_CGI)
+
+todo: cwf
+	gcc ${OPT_FLAGS} src/endpoints.c -fPIC -shared -o lib/libendpoints.so -L../src  -lcwf -lssl -lcrypto -lm
+	mv cwf.cgi cgi-bin/
+
+cwf:
+	cd ../src/ &&  $(MAKE) EXTRA_C_FLAGS=${OPT_FLAGS}  && cd -
+	gcc ${OPT_FLAGS} ${DEBUG_CGI} ../src/main.c ../src/libcwf.a -o cwf.cgi -ldl -lpthread -lssl -lcrypto -lm
+
+clean:
+	cd ../src/ &&  $(MAKE) clean  && cd -
+EOF
+}
+
+ADD_EXAMPLE_CONFIGS() {
+
+	app_name=$1
+
+cat << EOF > "${app_name}/endpoints.ini"
+[/]
+function=cgi_info
+EOF
+
+app_dir=$PWD/${app_name}
+
+cat << EOF > "${app_name}/site_config.ini"
+[site_config]
+endpoints_lib_path = ${app_dir}/lib/libendpoints.so
+endpoints_config_path = ${app_dir}/endpoints.ini
+database_path = ${app_dir}/database/database.sqlite
+templates_path = ${app_dir}/templates
+session_files_path = ${app_dir}/sessions/
+print_debug_info = true
+EOF
+}
+
+ADD_EXAMPLE_ENDPOINT() {
+
+	app_name=$1
+
+cat << EOF > "${app_name}/src/endpoints.c"
+
+#include "../../src/3dparty/ctemplate-1.0/ctemplate.h"
+#include "../../src/cwf/cwf.h"
+#include "../../src/3dparty/stb/stb_ds.h"
+
+#include <string.h>
+
+ENDPOINT(cgi_info) {
+
+    header("Content-Type", "text/plain");
+    sds response = sdsempty();
+
+    cwf_request *request = cwf_vars->request;
+
+    for(int i = 0; i < request->server_data_len; i++) {
+        char *tmp = request->server_data[i].value;
+        if(tmp) response = sdscatfmt(response, "%s %s\n", request->server_data[i].key, tmp);
+    }
+
+    if(strcmp(request->data_type, "urlencoded") == 0) {
+        for(int i = 0; i < request->data_len; i++) {
+            string_array values = request->urlencoded_data[i].value;
+            for(int j = 0; j < arrlen(values); j++)
+                response = sdscatfmt(response, "%s %s\n", request->urlencoded_data[i].key, values[j]);
+        }
+    }
+
+    return response;
+}
+EOF
+
+}
+
+CREATE_NEW_APP() {
+	app_name=$1
+
+	mkdir -p "$app_name/static"
+	mkdir -p "$app_name/templates"
+	mkdir -p "$app_name/sessions"
+	mkdir -p "$app_name/lib"
+	mkdir -p "$app_name/src"
+	mkdir -p "$app_name/database"
+	mkdir -p "$app_name/cgi-bin"
+
+	ADD_EXAMPLE_ENDPOINT "$app_name"
+	ADD_EXAMPLE_CONFIGS  "$app_name"
+	ADD_EXAMPLE_MAKEFILE "$app_name"
+}
+
+case $1 in
+	app) 
+		CREATE_NEW_APP "$2"
+		;;
+esac
