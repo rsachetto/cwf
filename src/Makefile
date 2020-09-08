@@ -13,6 +13,9 @@ libcwf.a: $(OBJS) $(CRYPT)
 	ar r libcwf.a $(OBJS) $(CRYPT)
 	ranlib libcwf.a
 
+ssl_helper.o: dev_server/ssl_helper.c dev_server/ssl_helper.h
+	gcc $(CFLAGS) -c cwf/ssl_helper.c
+
 debug_helper.o: cwf/debug_helper.c cwf/debug_helper.h
 	gcc $(CFLAGS) -c cwf/debug_helper.c
 

@@ -12,12 +12,12 @@ debug_set:
 	$(eval OPT_FLAGS=-g3)
 	$(eval ENABLE_BACKTRACE=-DENABLE_BACKTRACE)
 
-server:
-	gcc ${OPT_FLAGS} src/dev_server/server.c src/3dparty/sds/sds.c -o bin/server
+server: src/dev_server/ssl_helper.c src/dev_server/server.c src/3dparty/sds/sds.c src/dev_server/ssl_helper.h  src/3dparty/sds/sds.h
+	gcc ${OPT_FLAGS} src/dev_server/ssl_helper.c src/dev_server/server.c src/3dparty/sds/sds.c -o bin/server -lssl -lcrypto
 
 cwf:
 	cd src/ && $(MAKE) EXTRA_C_FLAGS=${OPT_FLAGS} && cd -
-	gcc ${OPT_FLAGS} ${DEBUG_CGI} ${ENABLE_BACKTRACE} src/main.c src/libcwf.a -o src/cwf.cgi -ldl -lpthread -lssl -lcrypto -lm
+	gcc ${OPT_FLAGS} ${DEBUG_CGI} ${ENABLE_BACKTRACE} src/main.c src/libcwf.a -o src/cwf.cgi -ldl -lpthread -lcrypto -lm
 
 clean:
 	rm bin/server

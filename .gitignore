@@ -58,4 +58,8 @@ example_site/blog.sqlite.local
 bin/server
 *.session
 .idea/
-blog/
+provas/
+todo_list/cert.pem
+todo_list/cert2.key
+todo_list/key.pem
+
