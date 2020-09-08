@@ -1,14 +1,14 @@
-PHONY = release debug debug_cgi
+.PHONY = all debug release server cwf clean --debug_set --release_set
 
-all: release 
+all: release
 
-debug: debug_set server cwf
-release: release_set server cwf
+debug: --debug_set server cwf
+release: --release_set server cwf
 
-release_set:
+--release_set:
 	$(eval OPT_FLAGS=-O3)
 
-debug_set:
+--debug_set:
 	$(eval OPT_FLAGS=-g3)
 	$(eval ENABLE_BACKTRACE=-DENABLE_BACKTRACE)
 
@@ -17,7 +17,6 @@ server: src/dev_server/ssl_helper.c src/dev_server/server.c src/3dparty/sds/sds.
 
 cwf:
 	cd src/ && $(MAKE) EXTRA_C_FLAGS=${OPT_FLAGS} && cd -
-	gcc ${OPT_FLAGS} ${DEBUG_CGI} ${ENABLE_BACKTRACE} src/main.c src/libcwf.a -o src/cwf.cgi -ldl -lpthread -lcrypto -lm
 
 clean:
 	rm bin/server

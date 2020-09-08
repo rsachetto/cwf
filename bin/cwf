@@ -9,9 +9,9 @@ PHONY = release_set debug_set debug_cgi_set
 
 all: release
 
-debug: debug_set todo
-release: release_set todo
-debug_cgi: debug_cgi_set todo
+debug: debug_set app
+release: release_set app
+debug_cgi: debug_cgi_set app
 
 release_set:
 	$(eval OPT_FLAGS=-O3)
@@ -22,7 +22,7 @@ debug_set:
 debug_cgi_set: 
 	$(eval DEBUG_CGI=-DDEBUG_CGI)
 
-todo: cwf
+app: cwf
 	gcc ${OPT_FLAGS} src/endpoints.c -fPIC -shared -o lib/libendpoints.so -L../src  -lcwf -lssl -lcrypto -lm
 	mv cwf.cgi cgi-bin/
 
