@@ -12,7 +12,6 @@ debug_set:
 	$(eval OPT_FLAGS=-g3)
 	$(eval ENABLE_BACKTRACE=-DENABLE_BACKTRACE)
 
-
 server:
 	gcc ${OPT_FLAGS} src/dev_server/server.c src/3dparty/sds/sds.c -o bin/server
 

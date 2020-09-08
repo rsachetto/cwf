@@ -1,0 +1,4 @@
+ - TODO: Enable support for multiple applications in a single site. this can be achieved by creating a site.ini file that configure the endpoints and merging all endpoints in a single library.
+ - TODO: add CSRF protection - https://owasp.org/www-community/attacks/csrf - https://codefellows.github.io/sea-python-401d4/lectures/pyramid_day6_csrf.html
+ - TODO: add a sql function with prepared statements. https://stackoverflow.com/questions/9804371/syntax-and-sample-usage-of-generic-in-c11 and https://www.tutorialspoint.com/cprogramming/c_variable_arguments.htm
+ - TODO: test internationalization features - https://kirste.userpage.fu-berlin.de/chemnet/use/info/libc/libc_19.html - Maybe use gettext - https://man7.org/linux/man-pages/man3/gettext.3.html

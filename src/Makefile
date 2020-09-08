@@ -4,15 +4,17 @@
 OPENSSL_INCLUDE = /usr/include
 
 # To build without openssl comment out the "CRYPT =" line
-
 CRYPT = crypt.o
 
 CFLAGS = -fPIC $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
 
-OBJS = cwf.o session.o http.o cookie.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o sqlite3.o sds.o
+OBJS = debug_helper.o cwf.o session.o http.o cookie.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o sqlite3.o sds.o
 libcwf.a: $(OBJS) $(CRYPT)
 	ar r libcwf.a $(OBJS) $(CRYPT)
 	ranlib libcwf.a
+
+debug_helper.o: cwf/debug_helper.c cwf/debug_helper.h
+	gcc $(CFLAGS) -c cwf/debug_helper.c
 
 cwf.o: cwf/cwf.c cwf/cwf.h 
 	gcc $(CFLAGS) -c cwf/cwf.c
