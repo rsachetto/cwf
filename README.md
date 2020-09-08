@@ -3,7 +3,7 @@ A proof of concept C web framework using CGI and C99. This was never intended to
 
 # Installation and configuration
 
-##Using the development server
+## Using the development server
 
 ### Todo List example app
 
@@ -47,5 +47,5 @@ DOCUMENT_ROOT ./
 SERVER_SOFTWARE CWF Development server (0.1)
 ````
 
-##Installing on apache
+## Installing on apache
 TDB
