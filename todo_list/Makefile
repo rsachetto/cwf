@@ -4,7 +4,7 @@ all: release
 
 debug: debug_set todo
 release: release_set todo
-debug_cgi: debug_cgi_set todo
+debug_cgi: debug_set debug_cgi_set todo
 
 release_set:
 	$(eval OPT_FLAGS=-O3)
@@ -21,8 +21,8 @@ todo: cwf
 	mv cwf.cgi cgi-bin/
 
 cwf:
-	cd ../src/ &&  $(MAKE) EXTRA_C_FLAGS=${OPT_FLAGS}  && cd -
-	gcc ${OPT_FLAGS} ${DEBUG_CGI} ${ENABLE_BACKTRACE} ../src/main.c ../src/libcwf.a -o cwf.cgi -ldl -lpthread -lssl -lcrypto -lm
+	cd ../src/ &&  $(MAKE) EXTRA_C_FLAGS="${OPT_FLAGS} ${DEBUG_CGI}"  && cd -
+	gcc ${OPT_FLAGS} ${ENABLE_BACKTRACE} ../src/main.c ../src/libcwf.a -o cwf.cgi -ldl -lpthread -lssl -lcrypto -lm
 
 clean:
 	cd ../src/ &&  $(MAKE) clean  && cd -

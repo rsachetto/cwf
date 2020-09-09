@@ -9,19 +9,8 @@
 #include "cwf/cwf.h"
 #include "ini_parse/ini_parse.h"
 
-#ifdef DEBUG_CGI
-static void wait_for_gdb_to_attach() {
-    int is_waiting = 1;
-    while(is_waiting) {
-        sleep(1); // sleep for 1 second
-    }
-}
-#endif
 
 int main(int argc, char **argv) {
-#ifdef DEBUG_CGI
-    wait_for_gdb_to_attach();
-#endif
 
 #ifdef ENABLE_BACKTRACE
     setup_sigsegv();

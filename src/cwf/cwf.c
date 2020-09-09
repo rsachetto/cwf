@@ -586,10 +586,13 @@ static void free_cwf_request(cwf_request *request) {
     int data_len = shlen(request->urlencoded_data);
 
     for(int i = 0; i < data_len; i++) {
-        int value_len = arrlen(request->urlencoded_data[i].value);
-        for(int j = 0; j < value_len; i++) {
+        
+		int value_len = arrlen(request->urlencoded_data[i].value);
+
+		for(int j = 0; j < value_len; j++) {
             free(request->urlencoded_data[i].value[j]);
         }
+
         arrfree(request->urlencoded_data[i].value);
     }
 

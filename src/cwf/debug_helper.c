@@ -4,7 +4,24 @@
 
 #include "debug_helper.h"
 
+#include <stddef.h>       
+#include <unistd.h>
+
+#ifdef DEBUG_CGI
+static void wait_for_gdb_to_attach() {
+    int is_waiting = 1;
+    while(is_waiting) {
+        sleep(1); 
+    }
+}
+#endif
+
 static void dump_backtrace() {
+
+#ifdef DEBUG_CGI
+    wait_for_gdb_to_attach();
+#endif
+
     Dl_info mdlinfo;
     char syscom[256];
     int f = 0;
@@ -15,6 +32,7 @@ static void dump_backtrace() {
     void *_bt[100];
     void **bt = (void **)_bt;
     int sz = backtrace(bt, 100);
+
     // skip i = 0 since it is this dump_backtrace function
     for(int i = 1; i < sz; ++i) {
         if(!dladdr(bt[i], &mdlinfo))
@@ -31,8 +49,8 @@ static void dump_backtrace() {
 #endif
 
 #ifdef HAVE_ADDR2LINE
-        sprintf(syscom, "addr2line --demangle --basenames --functions -e %s %p", mdlinfo.dli_fname,
-                mdlinfo.dli_saddr - mdlinfo.dli_fbase + bt[i] - mdlinfo.dli_saddr);
+		ptrdiff_t real_addr = bt[i] - mdlinfo.dli_fbase;
+        sprintf(syscom, "addr2line --demangle --basenames --functions -e %s %lx", mdlinfo.dli_fname, real_addr);
         FILE *cmd = popen(syscom, "r");
         int num = fscanf(cmd, "%s\n%s\n", funcname, fileline);
         status = pclose(cmd);
