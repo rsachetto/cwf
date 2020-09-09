@@ -2,6 +2,8 @@
 #define __SERVER_H
 
 #include <stdbool.h>
+#include <unistd.h>
+#include <sys/socket.h>
 
 #include "mimetypes.h"
 #include "ssl_helper.h"

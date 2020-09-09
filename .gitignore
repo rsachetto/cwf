@@ -62,4 +62,4 @@ provas/
 todo_list/cert.pem
 todo_list/cert2.key
 todo_list/key.pem
-
+todo_list/database/database.sqlite
