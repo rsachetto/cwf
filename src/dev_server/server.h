@@ -29,48 +29,4 @@ struct mime_type {
     char *value; // mime-type
 };
 
-static const char *get_filename_ext(const char *filename) {
-    const char *dot = strrchr(filename, '.');
-    if(!dot || dot == filename)
-        return "";
-    return dot + 1;
-}
-
-static void load_mime_types(struct mime_type **mime_types) {
-    int ext_number;
-    shdefault(*mime_types, NULL);
-    sh_new_arena(*mime_types);
-
-    for(int i = 0; i < NUM_MIME_TYPES; i++) {
-        sds *extensions = sdssplitlen(mime_types_raw[i][1], sizeof(mime_types_raw[i][1]), " ", 1, &ext_number);
-        for(int j = 0; j < ext_number; j++) {
-            shput(*mime_types, extensions[j], mime_types_raw[i][0]);
-        }
-        sdsfreesplitres(extensions, ext_number);
-    }
-}
-
-static int server_read(void *sock, void *buf, int bytes, bool ssl_enabled) {
-    if(ssl_enabled) {
-        SSL *ssl_sock = (SSL *)sock;
-        return SSL_read(ssl_sock, buf, bytes);
-    } else {
-        int socket = *((int *)sock);
-        return read(socket, buf, bytes);
-    }
-}
-
-static int server_write(void *sock, void *buf, int bytes, bool ssl_enabled) {
-    if(ssl_enabled) {
-        SSL *ssl_sock = (SSL *)sock;
-        return SSL_write(ssl_sock, buf, bytes);
-    } else {
-        int socket = *((int *)sock);
-        return send(socket, buf, bytes, MSG_NOSIGNAL);
-    }
-}
-
-void start_server(int port);
-void respond(int, bool, bool);
-
 #endif /* __SERVER_H */

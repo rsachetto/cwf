@@ -17,91 +17,69 @@ sds cert_file, key_file;
 int listener;
 struct mime_type *mime_types;
 
-int main(int argc, char *argv[]) {
-    struct sockaddr_in clientaddr;
-    socklen_t addrlen;
-    int client_socket;
-    char c;
-
-    bool verbose = false;
-    bool https = false;
-
-    ROOT = getenv("PWD");
-
-    int port = 8080;
-
-    uid_t uid = getuid(), euid = geteuid();
-
-    // Parsing the command line arguments
-    while((c = getopt(argc, argv, "p:r:vs")) != -1) {
-        switch(c) {
-        case 'r': {
-            int arglen = strlen(optarg);
-            if(optarg[arglen - 1] != '/') {
-                ROOT = malloc(arglen + 2);
-                strcpy(ROOT, optarg);
-                ROOT[arglen] = '/';
-                ROOT[arglen + 1] = '\0';
-            } else {
-                ROOT = strdup(optarg);
-            }
-        } break;
-        case 'p':
-            port = strtol(optarg, NULL, 10);
-            if(port < 1 || port > 65535) {
-                fprintf(stderr, "Invalid port number %d. Valid values are from 1 to 65535\n", port);
-                exit(1);
-            } else if(port < 1024) {
-                if(uid > 0 && uid == euid) {
-                    fprintf(stderr, "Invalid port number %d. You need to be root to open a port < 1024", port);
-                    exit(1);
-                }
-            }
-            break;
-        case 'v':
-            verbose = true;
-            break;
-        case 's':
-            https = true;
-            break;
-        case '?':
-            fprintf(stderr, "Usage: %s -p PORT -r ROOT\n", argv[0]);
-            exit(1);
-        default:
-            exit(1);
-        }
-    }
-
-    if(https) {
-        cert_file = sdscatfmt(sdsempty(), "%scert.pem", ROOT);
-        key_file = sdscatfmt(sdsempty(), "%skey.pem", ROOT);
-    }
-
-    load_mime_types(&mime_types);
-    start_server(port);
-
-    if(https) {
-        printf("HTTPS server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
-    } else {
-        printf("HTTP server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
-    }
-
-    while(1) {
-        addrlen = sizeof(clientaddr);
-        client_socket = accept(listener, (struct sockaddr *)&clientaddr, &addrlen);
-
-        if(client_socket < 0) {
-            perror("accept() error");
-        } else {
-            respond(client_socket, https, verbose);
-        }
-    }
-
-    return 0;
+static const char *get_filename_ext(const char *filename) {
+    const char *dot = strrchr(filename, '.');
+    if(!dot || dot == filename)
+        return "";
+    return dot + 1;
 }
 
-// start server
-void start_server(int port) {
+static void load_mime_types(struct mime_type **mime_types) {
+    int ext_number;
+    shdefault(*mime_types, NULL);
+    sh_new_arena(*mime_types);
+
+    for(int i = 0; i < NUM_MIME_TYPES; i++) {
+        sds *extensions = sdssplitlen(mime_types_raw[i][1], sizeof(mime_types_raw[i][1]), " ", 1, &ext_number);
+        for(int j = 0; j < ext_number; j++) {
+            shput(*mime_types, extensions[j], mime_types_raw[i][0]);
+        }
+        sdsfreesplitres(extensions, ext_number);
+    }
+}
+
+static int server_read(void *sock, void *buf, int bytes, bool ssl_enabled) {
+    if(ssl_enabled) {
+        SSL *ssl_sock = (SSL *)sock;
+        return SSL_read(ssl_sock, buf, bytes);
+    } else {
+        int socket = *((int *)sock);
+        return read(socket, buf, bytes);
+    }
+}
+
+static int server_write(void *sock, void *buf, int bytes, bool ssl_enabled) {
+    if(ssl_enabled) {
+        SSL *ssl_sock = (SSL *)sock;
+        return SSL_write(ssl_sock, buf, bytes);
+    } else {
+        int socket = *((int *)sock);
+        return send(socket, buf, bytes, MSG_NOSIGNAL);
+    }
+}
+
+static void send_header(void *socket, const char *header, bool last, bool ssl_enabled) {
+
+    if(ssl_enabled) {
+        SSL *sc = (SSL *)socket;
+        SSL_write(sc, header, strlen(header));
+        SSL_write(sc, "\r\n", 2);
+
+        if(last) {
+            SSL_write(sc, "\r\n", 2);
+        }
+    } else {
+        int sc = *((int *)socket);
+        send(sc, header, strlen(header), MSG_NOSIGNAL);
+        send(sc, "\r\n", 2, MSG_NOSIGNAL);
+
+        if(last) {
+            send(sc, "\r\n", 2, MSG_NOSIGNAL);
+        }
+    }
+}
+
+static void start_server(int port) {
     int yes = 1;
     struct sockaddr_in serveraddr;
 
@@ -133,33 +111,7 @@ void start_server(int port) {
     }
 }
 
-void send_header(void *socket, const char *header, bool last, bool ssl_enabled) {
-
-    if(ssl_enabled) {
-        SSL *sc = (SSL *)socket;
-        SSL_write(sc, header, strlen(header));
-        SSL_write(sc, "\r\n", 2);
-
-        if(last) {
-            SSL_write(sc, "\r\n", 2);
-        }
-    } else {
-        int sc = *((int *)socket);
-        send(sc, header, strlen(header), MSG_NOSIGNAL);
-        send(sc, "\r\n", 2, MSG_NOSIGNAL);
-
-        if(last) {
-            send(sc, "\r\n", 2, MSG_NOSIGNAL);
-        }
-    }
-}
-
-#define PARENT_READ readpipe[0]
-#define CHILD_WRITE readpipe[1]
-#define CHILD_READ writepipe[0]
-#define PARENT_WRITE writepipe[1]
-
-void execute_cgi(void *socket, sds *request_headers, sds request_content, int num_headers, bool https, bool verbose) {
+static void execute_cgi(void *socket, sds *request_headers, sds request_content, int num_headers, bool https, bool verbose) {
 
     int writepipe[2] = {-1, -1}, /* parent -> child */
         readpipe[2] = {-1, -1};  /* child -> parent */
@@ -235,6 +187,11 @@ void execute_cgi(void *socket, sds *request_headers, sds request_content, int nu
         perror("fork");
     }
 
+#define PARENT_READ readpipe[0]
+#define CHILD_WRITE readpipe[1]
+#define CHILD_READ writepipe[0]
+#define PARENT_WRITE writepipe[1]
+
     if(childpid == 0) {
         close(PARENT_WRITE);
         close(PARENT_READ);
@@ -274,7 +231,7 @@ void execute_cgi(void *socket, sds *request_headers, sds request_content, int nu
                     continue;
                 } else {
                     perror("reading from child");
-                    exit(1);
+                    exit(EXIT_FAILURE);
                 }
             } else if(count == 0) {
                 break;
@@ -377,7 +334,7 @@ void execute_cgi(void *socket, sds *request_headers, sds request_content, int nu
             if(verbose)
                 printf("%s\n", response_headers);
 
-            // TODO: maybe we can send the headers withou having to make a string buffer
+            // TODO: maybe we can send the headers without having to make a string buffer
             size_t content_length = sdslen(response_content);
             sds content_length_header = NULL;
 
@@ -590,3 +547,118 @@ void respond(int client_socket, bool https, bool verbose) {
     if(!error)
         fprintf(stderr, "Respond to request %s %s took %ld ms\n", method_uri_version[0], method_uri_version[1], micros_used / 1000);
 }
+
+int main(int argc, char *argv[]) {
+
+    struct sockaddr_in clientaddr;
+    socklen_t addrlen;
+    int client_socket;
+    char c;
+
+    fd_set master;
+    fd_set read_fds;
+    int fdmax;
+    FD_ZERO(&master);
+    FD_ZERO(&read_fds);
+
+    bool verbose = false;
+    bool https = false;
+
+    ROOT = getenv("PWD");
+
+    int port = 8080;
+
+    uid_t uid = getuid(), euid = geteuid();
+
+    // Parsing the command line arguments
+    while((c = getopt(argc, argv, "p:r:vs")) != -1) {
+        switch(c) {
+        case 'r': {
+            int arglen = strlen(optarg);
+            if(optarg[arglen - 1] != '/') {
+                ROOT = malloc(arglen + 2);
+                strcpy(ROOT, optarg);
+                ROOT[arglen] = '/';
+                ROOT[arglen + 1] = '\0';
+            } else {
+                ROOT = strdup(optarg);
+            }
+        } break;
+        case 'p':
+            port = strtol(optarg, NULL, 10);
+            if(port < 1 || port > 65535) {
+                fprintf(stderr, "Invalid port number %d. Valid values are from 1 to 65535\n", port);
+                exit(1);
+            } else if(port < 1024) {
+                if(uid > 0 && uid == euid) {
+                    fprintf(stderr, "Invalid port number %d. You need to be root to open a port < 1024", port);
+                    exit(1);
+                }
+            }
+            break;
+        case 'v':
+            verbose = true;
+            break;
+        case 's':
+            https = true;
+            break;
+        case '?':
+            fprintf(stderr, "Usage: %s -p PORT -r ROOT\n", argv[0]);
+            exit(1);
+        default:
+            exit(1);
+        }
+    }
+
+    if(https) {
+        cert_file = sdscatfmt(sdsempty(), "%scert.pem", ROOT);
+        key_file = sdscatfmt(sdsempty(), "%skey.pem", ROOT);
+    }
+
+    load_mime_types(&mime_types);
+    start_server(port);
+
+    if(https) {
+        printf("HTTPS server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
+    } else {
+        printf("HTTP server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
+    }
+
+    FD_SET(listener, &master);
+    fdmax = listener;
+
+    addrlen = sizeof(clientaddr);
+
+    while(1) {
+
+        read_fds = master;
+
+        if(select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1) {
+            perror("select() error!");
+            exit(EXIT_FAILURE);
+        }
+
+        for(int i = 0; i <= fdmax; i++) {
+
+            if(FD_ISSET(i, &read_fds)) {
+                if(i == listener) {
+
+                    if((client_socket = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) == -1) {
+                        perror("accept() error!");
+                    } else {
+                        FD_SET(client_socket, &master);
+                        if(client_socket > fdmax) {
+                            fdmax = client_socket;
+                        }
+                    }
+                } else {
+                    respond(i, https, verbose);
+                    FD_CLR(i, &master);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+

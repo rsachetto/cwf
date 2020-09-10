@@ -51,6 +51,7 @@ void add_custom_header(const char *name, const char *value, http_header *header)
 }
 
 void add_cookie_to_header(cwf_cookie *c, http_header *header) {
+
     if(!c || !c->name || !c->value)
         return;
 
@@ -112,4 +113,3 @@ void free_cwf_headers(http_header header) {
 
     shfree(header);
 }
-
