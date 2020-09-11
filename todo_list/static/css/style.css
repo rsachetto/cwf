@@ -67,7 +67,7 @@ h1 {
 .inputContainer.half.last.right {
     border-left: 1px solid #efefef;
 }
-input[type="date"], input[type="text"], select {
+input[type="date"], input[type="text"], input[type="password"], select {
     height: 100%;
     width: 100%;
     padding: 0 20px;
@@ -89,7 +89,7 @@ input[type="date"], input[type="text"], select {
 input[type="date"] {
     cursor: pointer;
 }
-input[type="date"]:focus, input[type="text"]:focus, select:focus {
+input[type="date"]:focus, input[type="text"]:focus, input[type="password"]:focus, select:focus {
     outline: none;
     background: #ecf0f1;
 }
@@ -297,4 +297,10 @@ footer a {
     border: none;
     outline: none;
     padding: 0 100px;
+}
+
+.login {
+    background: #444;
+    padding-left: 15px;
+    text-align: center;
 }

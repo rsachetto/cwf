@@ -25,17 +25,20 @@ void free_cookie(cwf_cookie *cookie) {
 }
 
 cwf_cookie *get_cookie() {
+
     const char *env;
+
+    if((env = getenv("HTTP_COOKIE")) == 0) {
+        return NULL;
+    }
+
     char *buf, *p, *cookie_data[2];
 
     cwf_cookie *v = calloc(1, sizeof(cwf_cookie));
 
-    if((env = getenv("HTTP_COOKIE")) == 0) {
-        free(v);
-        return NULL;
-    }
     buf = (char *)malloc(strlen(env) + 1);
-    p = strcpy(buf, env);
+
+    p = strcpy(buf, env); //We need to keep a pointer to buf to be able to free it
 
     while((p = CGI_scanattr(p, cookie_data)) != 0) {
         if(v->name == NULL) {

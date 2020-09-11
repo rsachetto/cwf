@@ -7,8 +7,31 @@
 
 #include <sys/time.h>
 
+#define IF_TRUE_REDIRECT_TO(condition, url)                                                                                                                    \
+    if(condition) {                                                                                                                                            \
+        redirect((url));                                                                                                                                       \
+    }
+
+#define IS_LOGGED_IN() (SESSION_GET("auth") != NULL) ? true : false
+
+#define IF_LOGGED_IN_REDIRECT_TO(url)                                                                                                                          \
+    do {                                                                                                                                                       \
+        bool logged_in = IS_LOGGED_IN();                                                                                                                       \
+        IF_TRUE_REDIRECT_TO(logged_in, (url));                                                                                                                 \
+    } while(0)
+
+#define IF_NOT_LOGGED_IN_REDIRECT_TO(url)                                                                                                                      \
+    do {                                                                                                                                                       \
+        bool logged_in = IS_LOGGED_IN();                                                                                                                       \
+        IF_TRUE_REDIRECT_TO(!logged_in, (url));                                                                                                                \
+    } while(0)
+
 ENDPOINT(todo) {
     open_database_or_return_404();
+
+    session_start_with_expiration_date(2 * 24 * 60 * 60);
+
+    IF_NOT_LOGGED_IN_REDIRECT_TO("/");
 
     if(IS_POST()) {
         if(POST("taskAdd")) {
@@ -28,10 +51,9 @@ ENDPOINT(todo) {
 
             execute_query_or_return_404(query);
 
-            redirect("/");
-        }
+            redirect("/todo");
 
-        else if(POST("taskDelete")) {
+        } else if(POST("taskDelete")) {
             string_array checkedlist = POST_ARRAY("checkedbox");
             int num_ids = arrlen(checkedlist);
             sds query = sdsempty();
@@ -43,7 +65,7 @@ ENDPOINT(todo) {
                 sdsfree(query);
             }
 
-            redirect("/");
+            redirect("/todo");
         }
     }
 
@@ -60,8 +82,10 @@ ENDPOINT(todo) {
 
     varlist = db_records_to_loop(varlist, "todos", NULL);
 
+    varlist = TMPL_add_var(varlist, "username", SESSION_GET("username"));
+
     sds template_path = sdsnew(cwf_vars->templates_path);
-    template_path = sdscat(template_path, "index.tmpl");
+    template_path = sdscat(template_path, "todo.tmpl");
 
     // The varlist is freed in the render_template function
     sds response = render_template(varlist, template_path);
@@ -73,26 +97,39 @@ ENDPOINT(todo) {
     return response;
 }
 
-ENDPOINT(cgi_info) {
+ENDPOINT(login) {
 
-    header("Content-Type", "text/plain");
-    sds response = sdsempty();
+    sds response;
 
-    cwf_request *request = cwf_vars->request;
+    session_start();
 
-    for(int i = 0; i < request->server_data_len; i++) {
-        char *tmp = request->server_data[i].value;
-        if(tmp)
-            response = sdscatfmt(response, "%s %s\n", request->server_data[i].key, tmp);
-    }
+    if(IS_POST()) {
+        char *username = POST("username");
+        char *password = POST("password");
 
-    if(strcmp(request->data_type, "urlencoded") == 0) {
-        for(int i = 0; i < request->data_len; i++) {
-            string_array values = request->urlencoded_data[i].value;
-            for(int j = 0; j < arrlen(values); j++)
-                response = sdscatfmt(response, "%s %s\n", request->urlencoded_data[i].key, values[j]);
+        if(STRINGS_MATCH(username, "cwf") && STRINGS_MATCH(password, "cwf")) {
+            SESSION_PUT("auth", "y");
+            SESSION_PUT("username", username);
+            redirect("/todo");
+        } else {
+            redirect("/?login_error=y");
         }
-    }
 
-    return response;
+    } else {
+
+        IF_LOGGED_IN_REDIRECT_TO("/todo");
+
+        TMPL_varlist *varlist = 0;
+        varlist = request_to_varlist(varlist, NULL);
+
+        sds template_path = sdsnew(cwf_vars->templates_path);
+        template_path = sdscat(template_path, "index.tmpl");
+        response = render_template(varlist, template_path);
+        sdsfree(template_path);
+        return response;
+    }
+}
+
+ENDPOINT(logout) {
+    LOGOUT_AND_REDIRECT("/");
 }

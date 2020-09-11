@@ -22,7 +22,7 @@
 #define HEADER_INTERNAL_SERVER_ERROR SERVER_PROTOCOL " 500 Internal Server Error"
 #define HEADER_REDIRECT SERVER_PROTOCOL " 302 Found"
 
-#define BYTES 1024
+#define MAX_BUFFER_SIZE 1024
 
 struct mime_type {
     char *key;   // file extension

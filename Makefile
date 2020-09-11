@@ -6,7 +6,7 @@ debug: --debug_set server cwf
 release: --release_set server cwf
 
 --release_set:
-	$(eval OPT_FLAGS=-O3)
+	$(eval OPT_FLAGS=-O2)
 
 --debug_set:
 	$(eval OPT_FLAGS=-g3)

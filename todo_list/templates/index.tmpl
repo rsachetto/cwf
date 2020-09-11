@@ -1,58 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8"/>
   <title>TodoApp - Create A Todo With CWF</title>
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css" integrity="sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M" crossorigin="anonymous">
-  <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
-   <link rel="stylesheet" type="text/css" href="static/css/style.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css" integrity="sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M" crossorigin="anonymous"/>  <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css"/>
+   <link rel="stylesheet" type="text/css" href="static/css/style.css"/>
 </head>
 <body>
 <div django-app="TaskManager">
     <div class="container">
             <div class="content">
- 			<h1><img src="/static/logo.jpg" width="32" heigth="32"/> TodoApp</h1>
+ 			<h1><img src="/static/logo_64.png" height="32"/> TodoApp</h1>
             <p class="tagline">a CWF todo app</p>
             <form action="" method="post">
                 <div class="inputContainer">
-                    <input type="text" id="description" class="taskName" placeholder="What do you need to do?" name="description" required>
-                    <label for="description">Description</label>
+                    <input type="text" id="username" class="taskName" placeholder="" name="username" required/>
+                    <label for="description">Username</label>
                 </div>
-                <div class="inputContainer half last">
-                    <i class="fa fa-caret-down selectArrow"></i>
-                    <select id="category" class="taskCategory" name="category_select">
-                    <option class="disabled" value="">Choose a category</option>
-		<TMPL_LOOP name="categories">
-	        	<option class="" value="<TMPL_VAR name="id">" name="<TMPL_VAR name="id">"><TMPL_VAR name="name"></option>
-		</TMPL_LOOP>
-                    </select>
-                    <label for="category">Category</label>
-                </div>
-                <div class="inputContainer half last right">
-                    <input type="date" id="dueDate" class="taskDate" name="date">
-                    <label for="dueDate">Due Date</label>
+              <div class="inputContainer">
+                    <input type="password" id="password" class="taskName" placeholder=" " name="password" required/>
+                    <label for="description">Password</label>
                 </div>
                 <div class="row">
-                    <button class="taskAdd" name="taskAdd" type="submit"><i class="fa fa-plus icon"></i>Add task</button>
-                    <button class="taskDelete" name="taskDelete" formnovalidate="" type="submit" onclick="$('input#sublist').click();"><i class="fa fa-trash-o icon"></i>Delete Tasks</button>
-                    <TMPL_IF name="num_records" value="0">
-                        <TMPL_ELSE>
-                        <button class="taskAdd" name="select-all" id="select-all"  formnovalidate="" type="button"><i class="fa fa-check-square icon"></i>Toggle Selection</button>
-                    </TMPL_IF>
+                    <button class="login" name="login" type="submit">Login</button>
                 </div>
-            <ul class="taskList">
-		<TMPL_LOOP name="todos">
-                <li class="taskItem">
-                    <input type="checkbox" class="taskCheckbox" name="checkedbox" id="<TMPL_VAR name="id">" value="<TMPL_VAR name="id">">
-                    <label for="<TMPL_VAR name="id">"><span class="complete-"><TMPL_VAR name="title"></span></label>
-                    <span class="category-<TMPL_VAR name="name">"><TMPL_VAR name="name"></span>
-                    <strong class="taskDate"><i class="fa fa-calendar"></i><TMPL_VAR name="created"> - <TMPL_VAR name="due_date"></strong>
-                </li>
-		</TMPL_LOOP>
-            </ul><!-- taskList -->
+              <div class="row">
+                  <TMPL_IF name="login_error">
+                    Wrong username or password!
+                  </TMPL_IF>
+                </div>
             </form>
-            </div><!-- content -->
- </div><!-- container -->
+            </div>
+ </div>
 </div>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 <script language="JavaScript">

@@ -18,9 +18,10 @@ int listener;
 struct mime_type *mime_types;
 
 static const char *get_filename_ext(const char *filename) {
-    const char *dot = strrchr(filename, '.');
-    if(!dot || dot == filename)
+    const char *dot = strrchr(filename, '.'); //Return the last ocurrency of the .
+    if(!dot || dot == filename) {
         return "";
+    }
     return dot + 1;
 }
 
@@ -113,6 +114,12 @@ static void start_server(int port) {
 
 static void execute_cgi(void *socket, sds *request_headers, sds request_content, int num_headers, bool https, bool verbose) {
 
+    //Macros for reading and writing in the child pipe
+    #define PARENT_READ readpipe[0]
+    #define CHILD_WRITE readpipe[1]
+    #define CHILD_READ writepipe[0]
+    #define PARENT_WRITE writepipe[1]
+
     int writepipe[2] = {-1, -1}, /* parent -> child */
         readpipe[2] = {-1, -1};  /* child -> parent */
     pid_t childpid;
@@ -186,11 +193,6 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
     if((childpid = fork()) == -1) {
         perror("fork");
     }
-
-#define PARENT_READ readpipe[0]
-#define CHILD_WRITE readpipe[1]
-#define CHILD_READ writepipe[0]
-#define PARENT_WRITE writepipe[1]
 
     if(childpid == 0) {
         close(PARENT_WRITE);
@@ -371,7 +373,7 @@ void respond(int client_socket, bool https, bool verbose) {
 
     sds request = sdsempty();
 
-    char data_to_send[BYTES];
+    char data_to_send[MAX_BUFFER_SIZE];
     int rcvd, fd, bytes_read;
 
     sds *request_lines;
@@ -403,6 +405,8 @@ void respond(int client_socket, bool https, bool verbose) {
                 char msg[1024];
                 ERR_error_string_n(ERR_get_error(), msg, sizeof(msg));
                 printf("%s %s %s %s\n", msg, ERR_lib_error_string(0), ERR_func_error_string(0), ERR_reason_error_string(0));
+
+				//error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown
             }
 
             // close(client_socket);
@@ -412,9 +416,6 @@ void respond(int client_socket, bool https, bool verbose) {
         }
     }
 
-    // TODO: this is only the header. We need to read more after we get the content-length. This will be necessary when
-    // reading POST data;
-
     void *socket_pointer = NULL;
 
     if(https) {
@@ -423,6 +424,7 @@ void respond(int client_socket, bool https, bool verbose) {
         socket_pointer = &client_socket;
     }
 
+    // TODO: this is only the header. We need to read more after we get the content-length. This will be necessary when reading POST data;
     while((rcvd = server_read(socket_pointer, mesg, 1, https)) > 0) {
         request = sdscat(request, mesg);
         int len = sdslen(request);
@@ -487,7 +489,7 @@ void respond(int client_socket, bool https, bool verbose) {
                             sdsfree(content_length_header);
                             sdsfree(content_type_header);
 
-                            while((bytes_read = read(fd, data_to_send, BYTES)) > 0) {
+                            while((bytes_read = read(fd, data_to_send, MAX_BUFFER_SIZE)) > 0) {
                                 server_write(socket_pointer, data_to_send, bytes_read, https);
                             }
 
@@ -507,12 +509,13 @@ void respond(int client_socket, bool https, bool verbose) {
                     }
 
                     long received_data = 0;
-                    char buff[2] = {0};
+                    char buff[MAX_BUFFER_SIZE] = {0};
                     sds request_content = sdsempty();
 
-                    // TODO: we can read by a content_length/max_buffer
+                    int bytes_to_read = (content_length > MAX_BUFFER_SIZE) ? MAX_BUFFER_SIZE : content_length;
+
                     while(received_data < content_length) {
-                        rcvd = server_read(socket_pointer, buff, 1, https);
+                        rcvd = server_read(socket_pointer, buff, bytes_to_read, https);
                         request_content = sdscat(request_content, buff);
                         received_data += rcvd;
                     }

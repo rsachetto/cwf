@@ -4,15 +4,16 @@
 #include "common_data_structures.h"
 #include "cookie.h"
 #include "http.h"
+#include "../3dparty/sds/sds.h"
+
 
 typedef struct cwf_session_t {
     cwf_cookie *cookie;
     string_hash data;
-    char *db_filename;
+    sds session_filename;
 } cwf_session;
 
-#define session_start() cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
-void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path);
+void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path, int expires);
 
 #define session_destroy() cwf_session_destroy(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
 void cwf_session_destroy(cwf_session **session, http_header *headers, char *session_files_path);

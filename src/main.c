@@ -5,6 +5,7 @@
 #include <dlfcn.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "cwf/cwf.h"
 #include "ini_parse/ini_parse.h"

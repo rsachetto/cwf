@@ -142,18 +142,6 @@ void free_endpoint_config_hash(endpoint_config_item *hash) {
     shfree(hash);
 }
 
-cwf_request *new_empty_request() {
-    cwf_request *req = (cwf_request *)calloc(1, sizeof(struct cwf_request_t));
-
-    sh_new_strdup(req->server_data);
-    shdefault(req->server_data, NULL);
-
-    sh_new_strdup(req->urlencoded_data);
-    shdefault(req->urlencoded_data, NULL);
-
-    return req;
-}
-
 endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
     char *str = (char *)REQUEST_URI;
 
@@ -261,6 +249,18 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
 
     free(tmp);
     return it;
+}
+
+cwf_request *new_empty_request() {
+    cwf_request *req = (cwf_request *)calloc(1, sizeof(struct cwf_request_t));
+
+    sh_new_strdup(req->server_data);
+    shdefault(req->server_data, NULL);
+
+    sh_new_strdup(req->urlencoded_data);
+    shdefault(req->urlencoded_data, NULL);
+
+    return req;
 }
 
 void add_params_to_request(cwf_request *req, url_params *params) {

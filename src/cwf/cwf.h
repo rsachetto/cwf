@@ -23,8 +23,10 @@
 #define IS_POST() IS_REQ_POST(cwf_vars->request)
 
 #define header(key, value) add_custom_header((key), (value), &(cwf_vars->headers))
+#define session_start() cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path, 31536000) // 1 year
+#define session_start_with_expiration_date(expiration_date)                                                                                                    \
+    cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path, (expiration_date))
 
-#define session_start() cwf_session_start(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
 #define session_destroy() cwf_session_destroy(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
 #define SESSION_GET(key) cwf_session_get(cwf_vars->session, (key))
 #define SESSION_PUT(key, value) cwf_session_put(cwf_vars->session, (key), (value))
@@ -32,8 +34,10 @@
 #define generate_default_404_header() cwf_generate_default_404_header(&(cwf_vars->headers))
 
 #define redirect(url)                                                                                                                                          \
-    cwf_redirect((url), &(cwf_vars->headers));                                                                                                                 \
-    return NULL;
+    do {                                                                                                                                                       \
+        cwf_redirect((url), &(cwf_vars->headers));                                                                                                             \
+        return NULL;                                                                                                                                           \
+    } while(0)
 
 #define generate_simple_404(format, ...) simple_404_page(cwf_vars, format, __VA_ARGS__)
 
@@ -48,8 +52,10 @@
 #define POST_ARRAY(key) cwf_post_vars(cwf_vars->request, (key))
 
 #define DUMP_REQUEST_VARS()                                                                                                                                    \
-    generate_default_404_header();                                                                                                                             \
-    return cwf_dump_request_vars(cwf_vars->request)
+    do {                                                                                                                                                       \
+        generate_default_404_header();                                                                                                                         \
+        return cwf_dump_request_vars(cwf_vars->request);                                                                                                       \
+    } while(0)
 
 #define render_template(varlist, path) cwf_render_template((varlist), (path), &(cwf_vars->headers))
 
@@ -61,19 +67,35 @@
 
 #define open_database() cwf_open_database(cwf_vars);
 #define open_database_or_return_404()                                                                                                                          \
-    open_database();                                                                                                                                           \
-    if(cwf_vars->database->error) {                                                                                                                            \
-        return generate_simple_404("Database error: %s", cwf_vars->database->error);                                                                           \
-    }
+    do {                                                                                                                                                       \
+        open_database();                                                                                                                                       \
+        if(cwf_vars->database->error) {                                                                                                                        \
+            return generate_simple_404("Database error: %s", cwf_vars->database->error);                                                                       \
+        }                                                                                                                                                      \
+    } while(0)
 
 #define close_database() cwf_close_database(cwf_vars);
 
 #define execute_query(query) cwf_execute_query((query), cwf_vars->database)
 #define execute_query_or_return_404(query)                                                                                                                     \
-    execute_query((query));                                                                                                                                    \
-    if(cwf_vars->database->error) {                                                                                                                            \
-        return generate_simple_404("Database error: %s", cwf_vars->database->error);                                                                           \
-    }
+    do {                                                                                                                                                       \
+        execute_query((query));                                                                                                                                \
+        if(cwf_vars->database->error) {                                                                                                                        \
+            return generate_simple_404("Database error: %s", cwf_vars->database->error);                                                                       \
+        }                                                                                                                                                      \
+    } while(0)
+
+#define LOGOUT()                                                                                                                                               \
+    do {                                                                                                                                                       \
+        session_start();                                                                                                                                       \
+        session_destroy();                                                                                                                                     \
+    } while(0)
+
+#define LOGOUT_AND_REDIRECT(redirect_url)                                                                                                                      \
+    do {                                                                                                                                                       \
+        LOGOUT();                                                                                                                                              \
+        redirect((redirect_url));                                                                                                                              \
+    } while(0)
 
 typedef enum { INT, STRING, FLOAT, INVALID } parameter_type;
 

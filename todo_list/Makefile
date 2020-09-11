@@ -7,7 +7,7 @@ release: release_set todo
 debug_cgi: debug_set debug_cgi_set todo
 
 release_set:
-	$(eval OPT_FLAGS=-O3)
+	$(eval OPT_FLAGS=-O2)
  
 debug_set:
 	$(eval OPT_FLAGS=-g3)
