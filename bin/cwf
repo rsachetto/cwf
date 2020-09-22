@@ -51,7 +51,7 @@ cat << EOF > "${app_name}/site_config.ini"
 endpoints_lib_path = ${app_dir}/lib/libendpoints.so
 endpoints_config_path = ${app_dir}/endpoints.ini
 database_path = ${app_dir}/database/database.sqlite
-templates_path = ${app_dir}/templates
+templates_path = ${app_dir}/templates/
 session_files_path = ${app_dir}/sessions/
 print_debug_info = true
 EOF

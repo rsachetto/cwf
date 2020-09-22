@@ -10,7 +10,6 @@
 #include "cwf/cwf.h"
 #include "ini_parse/ini_parse.h"
 
-
 int main(int argc, char **argv) {
 
 #ifdef ENABLE_BACKTRACE
@@ -18,6 +17,9 @@ int main(int argc, char **argv) {
 #endif
 
     cwf_vars *cwf_vars = calloc(1, sizeof(struct cwf_vars_t));
+
+    // check if the site or even the endpoint will use databases
+    cwf_vars->database = calloc(1, sizeof(struct cwf_database_t));
 
     cwf_vars->request = new_from_env_vars();
 
@@ -32,6 +34,8 @@ int main(int argc, char **argv) {
     }
 
     cwf_vars->templates_path = strdup(cwf_vars->document_root);
+	cwf_vars->static_path = malloc(strlen(cwf_vars->document_root) + strlen("/static/") + 1);
+	sprintf(cwf_vars->static_path, "%s%s", cwf_vars->document_root, "/static/");
 
     sds site_config_file = sdsnew(cwf_vars->document_root);
 
@@ -126,7 +130,7 @@ int main(int argc, char **argv) {
     if(endpoint_configs)
         free_endpoint_config_hash(endpoint_configs);
 
-    //TODO: maybe we will also need to release the file locks if the section is not readonly
+    // TODO: maybe we will also need to release the file locks if the section is not readonly
     return 0;
 }
 

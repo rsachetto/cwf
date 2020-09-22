@@ -32,5 +32,6 @@ using __cxxabiv1::__cxa_demangle;
 #include <ucontext.h>
 
 void setup_sigsegv();
+void wait_for_gdb_to_attach();
 
 #endif // CWF_DEBUG_HELPER_H

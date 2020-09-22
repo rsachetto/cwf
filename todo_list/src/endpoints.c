@@ -39,6 +39,8 @@ ENDPOINT(todo) {
             char *date = POST("date");
             char *category = POST("category_select");
 
+
+			//TODO: make a helper function for this
             char created[11];
             time_t now = time(NULL);
             struct tm tm = *gmtime(&now);
@@ -49,7 +51,8 @@ ENDPOINT(todo) {
                                   "VALUES('%s', '%s', '%s', '%s', 'Not used')",
                                   title, date, created, category);
 
-            execute_query_or_return_404(query);
+            cwf_query_result *dummy;
+            execute_query_or_return_404(dummy, query);
 
             redirect("/todo");
 
@@ -61,7 +64,9 @@ ENDPOINT(todo) {
             if(num_ids > 0) {
                 sds ids_list = sdsjoin(checkedlist, num_ids, ", ");
                 query = sdscatfmt(query, "DELETE FROM todolist_todolist where id in (%s);", ids_list);
-                execute_query_or_return_404(query);
+
+                cwf_query_result *dummy;
+                execute_query_or_return_404(dummy, query);
                 sdsfree(query);
             }
 
@@ -69,20 +74,22 @@ ENDPOINT(todo) {
         }
     }
 
-    execute_query_or_return_404("SELECT * FROM todolist_category ORDER BY name ASC;");
+    cwf_query_result *categories;
+    execute_query_or_return_404(categories, "SELECT * FROM todolist_category ORDER BY name ASC;");
 
     TMPL_varlist *varlist = 0;
-    varlist = db_records_to_loop(varlist, "categories", NULL);
+    db_records_to_loop(varlist, categories, "categories", NULL);
 
-    execute_query_or_return_404("SELECT todolist_todolist.id, todolist_todolist.title, todolist_todolist.created, "
-                                "todolist_todolist.due_date, "
-                                "todolist_category.name FROM todolist_todolist LEFT JOIN todolist_category ON "
-                                "todolist_todolist.category_id = "
-                                "todolist_category.id;");
+    cwf_query_result *todos;
+    execute_query_or_return_404(todos, "SELECT todolist_todolist.id, todolist_todolist.title, todolist_todolist.created, "
+                                       "todolist_todolist.due_date, "
+                                       "todolist_category.name FROM todolist_todolist LEFT JOIN todolist_category ON "
+                                       "todolist_todolist.category_id = "
+                                       "todolist_category.id;");
 
-    varlist = db_records_to_loop(varlist, "todos", NULL);
+    db_records_to_loop(varlist, todos, "todos", NULL);
 
-    varlist = TMPL_add_var(varlist, "username", SESSION_GET("username"));
+    varlist = TMPL_add_var(varlist, "username", SESSION_GET("username"), 0);
 
     sds template_path = sdsnew(cwf_vars->templates_path);
     template_path = sdscat(template_path, "todo.tmpl");
@@ -120,7 +127,7 @@ ENDPOINT(login) {
         IF_LOGGED_IN_REDIRECT_TO("/todo");
 
         TMPL_varlist *varlist = 0;
-        varlist = request_to_varlist(varlist, NULL);
+        request_to_varlist(varlist, NULL);
 
         sds template_path = sdsnew(cwf_vars->templates_path);
         template_path = sdscat(template_path, "index.tmpl");

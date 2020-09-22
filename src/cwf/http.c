@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 
+// TODO: for now redirects are always absolute
 void cwf_redirect(const char *url, http_header *headers) {
     char *tmp = (char *)url;
 
@@ -17,8 +18,7 @@ void cwf_redirect(const char *url, http_header *headers) {
             tmp = tmp + 1;
         }
 
-        value = sdsnew(tmp);
-
+        value = sdscatfmt(sdsempty(), "%s://%s/%s", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"), tmp);
     } else if(strlen(url) == 1 && *url == '/') {
         value = sdscatfmt(sdsempty(), "%s://%s/", getenv("REQUEST_SCHEME"), getenv("HTTP_HOST"));
     }

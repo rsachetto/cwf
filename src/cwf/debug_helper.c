@@ -8,19 +8,19 @@
 #include <unistd.h>
 
 #ifdef DEBUG_CGI
-static void wait_for_gdb_to_attach() {
+void wait_for_gdb_to_attach() {
     int is_waiting = 1;
     while(is_waiting) {
         sleep(1); 
     }
 }
+#else
+void wait_for_gdb_to_attach() {
+	fprintf(stderr, "Wait for gdb called but not compiled with DEBUG_CGI\n");
+}
 #endif
 
 static void dump_backtrace() {
-
-#ifdef DEBUG_CGI
-    wait_for_gdb_to_attach();
-#endif
 
     Dl_info mdlinfo;
     char syscom[256];

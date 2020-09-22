@@ -145,7 +145,7 @@ void free_endpoint_config_hash(endpoint_config_item *hash) {
 endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
     char *str = (char *)REQUEST_URI;
 
-    endpoint_config *it;
+    endpoint_config *config;
     char *tmp = NULL;
 
     size_t uri_len = strlen(REQUEST_URI);
@@ -155,7 +155,9 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
     }
 
     sds err = sdsempty();
+    int num_params = 0;
 
+	//QUERY_STRING is empty
     if(QUERY_STRING && !*QUERY_STRING) {
         char *first_slash = strchr(str, '/');
         if(first_slash) {
@@ -168,22 +170,21 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
             tmp = strdup(str);
         }
 
-        it = shget(endpoints_cfg, tmp);
+        config = shget(endpoints_cfg, tmp);
 
-        if(it && it->params) {
-            int expected_params = arrlen(it->params);
+        if(config && config->params) {
+            int expected_params = arrlen(config->params);
 
             if(first_slash) {
                 char *aux = strdup(first_slash + 1);
 
                 char *token;
                 token = strtok(aux, "/");
-                int num_params = 0;
 
                 while(token != NULL) {
                     url_params url_params;
                     if(num_params < expected_params) {
-                        url_params = it->params[num_params];
+                        url_params = config->params[num_params];
                     } else {
                         err = sdscatfmt(err, "Number of parameters exceed the configured number of parameters (%i).\n", expected_params);
                         break;
@@ -207,27 +208,32 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
                         break;
                     }
 
-                    it->params[num_params].value = strdup(token);
+                    config->params[num_params].value = strdup(token);
 
                     num_params++;
 
                     token = strtok(NULL, "/");
                 }
 
+				config->params->num_received_params = num_params;
                 free(aux);
 
+				/*
                 if(num_params != expected_params) {
                     err = sdscatfmt(err,
                                     "Number of parameters are different from the configured number of parameters (received %i, "
                                     "expected %i).\n",
                                     num_params, expected_params);
-                }
-            } else {
+                }*/
+            } 
+			/*
+			else {
                 err = sdscatfmt(err,
                                 "Number of parameters are different from the configured number of parameters (received 0, "
                                 "expected %i).\n",
                                 expected_params);
             }
+			*/
         }
 
     } else {
@@ -240,15 +246,16 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
             tmp = strdup("/");
         }
 
-        it = shget(endpoints_cfg, tmp);
+        config = shget(endpoints_cfg, tmp);
     }
 
     if(sdslen(err) > 0) {
-        it->error = err;
+        config->error = err;
     }
 
+
     free(tmp);
-    return it;
+    return config;
 }
 
 cwf_request *new_empty_request() {
@@ -264,7 +271,7 @@ cwf_request *new_empty_request() {
 }
 
 void add_params_to_request(cwf_request *req, url_params *params) {
-    for(int i = 0; i < arrlen(params); i++) {
+    for(int i = 0; i < params->num_received_params; i++) {
         string_array tmp = shget(req->urlencoded_data, params[i].name);
         arrput(tmp, strdup(params[i].value));
         shput(req->urlencoded_data, params[i].name, tmp);
@@ -405,24 +412,29 @@ sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_h
 }
 
 void cwf_open_database(cwf_vars *vars) {
-    if(vars->database == NULL)
-        vars->database = calloc(1, sizeof(struct cwf_database_t));
+
+    // TODO: maybe we should allow multiples databases???
+    if(vars->database->opened)
+        return;
 
     int rc = sqlite3_open(vars->database_path, &(vars->database->db));
 
     if(rc != SQLITE_OK) {
         vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
         sqlite3_close(vars->database->db);
+        vars->database->opened = false;
     }
+
+    vars->database->opened = true;
 }
 
 void cwf_close_database(cwf_vars *vars) {
     sqlite3_close(vars->database->db);
 }
 
-static int sqlite_callback(void *cwf_db, int num_results, char **column_values, char **column_names) {
+static int sqlite_callback(void *void_result, int num_results, char **column_values, char **column_names) {
     if(num_results) {
-        cwf_database *database = (cwf_database *)cwf_db;
+        cwf_query_result *result = (cwf_query_result *)void_result;
 
         string_hash line = NULL;
         shdefault(line, NULL);
@@ -439,30 +451,32 @@ static int sqlite_callback(void *cwf_db, int num_results, char **column_values, 
             }
         }
 
-        arrput(database->records, line);
-        database->num_records += 1;
+        arrput(result->result_array, line);
+        result->num_records += 1;
     }
 
     return 0;
 }
 
-void cwf_execute_query(const char *query, cwf_database *database) {
-    char *errmsg;
+cwf_query_result *cwf_execute_query(const char *query, cwf_database *database) {
 
-    // TODO We will have to free all records
-    if(database->records) {
-        arrfree(database->records);
-        database->records = NULL;
-        database->num_records = 0;
+    cwf_query_result *result = calloc(1, sizeof(struct cwf_query_result_t));
+
+    if(!database->opened) {
+        database->error = strdup("Database is not opened. Call open_database first!\n");
+        return NULL;
     }
 
-    int rc = sqlite3_exec(database->db, query, sqlite_callback, (void *)database, &errmsg);
+    char *errmsg;
+
+    int rc = sqlite3_exec(database->db, query, sqlite_callback, (void *)result, &errmsg);
 
     if(rc != SQLITE_OK) {
         database->error = strdup(errmsg);
         sqlite3_close(database->db);
         sqlite3_free(errmsg);
     }
+    return result;
 }
 
 int get_num_columns(string_hash r) {
@@ -489,14 +503,14 @@ TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value
     return varlist;
 }
 
-TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_database *database, modify_db_name_value_fn *modify) {
-    for(int i = 0; i < database->num_records; i++) {
-        for(int j = 0; j < get_num_columns(database->records[i]); j++) {
-            char *name = strdup(database->records[i][j].key);
+TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_query_result *data, modify_db_name_value_fn *modify) {
+    for(int i = 0; i < data->num_records; i++) {
+        for(int j = 0; j < get_num_columns(data->result_array[i]); j++) {
+            char *name = strdup(data->result_array[i][j].key);
             char *value = NULL;
 
-            if(database->records[i][j].value) {
-                value = strdup(database->records[i][j].value);
+            if(data->result_array[i][j].value) {
+                value = strdup(data->result_array[i][j].value);
             }
 
             if(modify) {
@@ -510,24 +524,32 @@ TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_database *data
     return varlist;
 }
 
-TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *database, char *loop_name, modify_db_name_value_fn *modify) {
+TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *data, char *loop_name, modify_db_name_value_fn *modify) {
     TMPL_loop *loop = 0;
 
-    for(int i = 0; i < database->num_records; i++) {
+    for(int i = 0; i < data->num_records; i++) {
         TMPL_varlist *loop_varlist = 0;
 
-        for(int j = 0; j < get_num_columns(database->records[i]); j++) {
-            char *name = strdup(database->records[i][j].key);
+        for(int j = 0; j < get_num_columns(data->result_array[i]); j++) {
+            char *name = strdup(data->result_array[i][j].key);
             char *value = NULL;
 
-            if(database->records[i][j].value)
-                value = strdup(database->records[i][j].value);
+            if(data->result_array[i][j].value)
+                value = strdup(data->result_array[i][j].value);
 
             if(modify) {
                 modify(&name, &value);
             }
 
-            loop_varlist = TMPL_add_var(loop_varlist, name, value, 0);
+            char char_loop_value[11];
+
+            sprintf(char_loop_value, "%d", i);
+
+            loop_varlist = TMPL_add_var(loop_varlist, name, value, "loop_counter", char_loop_value);
+
+            if(i == data->num_records - 1) {
+                loop_varlist = TMPL_add_var(loop_varlist, name, value, "last_record", char_loop_value);
+            }
             free(name);
             free(value);
         }
@@ -537,11 +559,58 @@ TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *databa
 
     varlist = TMPL_add_loop(varlist, loop_name, loop);
 
-    sds num_records = sdsfromlonglong(database->num_records);
+    sds num_records = sdsfromlonglong(data->num_records);
     varlist = TMPL_add_var(varlist, "num_records", num_records, 0);
     sdsfree(num_records);
 
     return varlist;
+}
+
+sds cwf_db_records_to_simple_json(cwf_query_result *data, modify_db_name_value_fn *modify) {
+
+    if(!data)
+        return sdsnew("[]");
+
+    sds json = sdsnew("[");
+
+    int num_records = data->num_records;
+
+    for(int i = 0; i < num_records; i++) {
+
+        json = sdscatfmt(json, "%s", "{");
+
+        int num_cols = get_num_columns(data->result_array[i]);
+
+        for(int j = 0; j < num_cols; j++) {
+            char *name = strdup(data->result_array[i][j].key);
+            char *value = NULL;
+
+            if(data->result_array[i][j].value)
+                value = strdup(data->result_array[i][j].value);
+
+            if(modify) {
+                modify(&name, &value);
+            }
+
+            if(j == num_cols - 1) {
+                json = sdscatfmt(json, "\"%s\":\"%s\"", name, value);
+            } else {
+                json = sdscatfmt(json, "\"%s\":\"%s\",", name, value);
+            }
+
+            free(name);
+            free(value);
+        }
+
+        if(i == num_records - 1) {
+            json = sdscatfmt(json, "%s", "}");
+        } else {
+            json = sdscatfmt(json, "%s", "},");
+        }
+    }
+
+    json = sdscatfmt(json, "%s", "]");
+    return json;
 }
 
 char_array strip_html_tags(const char *buf) {
@@ -586,10 +655,10 @@ static void free_cwf_request(cwf_request *request) {
     int data_len = shlen(request->urlencoded_data);
 
     for(int i = 0; i < data_len; i++) {
-        
-		int value_len = arrlen(request->urlencoded_data[i].value);
 
-		for(int j = 0; j < value_len; j++) {
+        int value_len = arrlen(request->urlencoded_data[i].value);
+
+        for(int j = 0; j < value_len; j++) {
             free(request->urlencoded_data[i].value[j]);
         }
 

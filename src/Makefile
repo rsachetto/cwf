@@ -8,7 +8,7 @@ CRYPT = crypt.o
 
 CFLAGS = -fPIC $(EXTRA_C_FLAGS) -D_DEFAULT_SOURCE -std=c99 -I . -I $(OPENSSL_INCLUDE)
 
-OBJS = debug_helper.o cwf.o session.o http.o cookie.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o sqlite3.o sds.o
+OBJS = debug_helper.o cwf.o session.o http.o cookie.o ctemplate.o ccgi.o prefork.o json.o ini.o ini_parse.o sqlite3.o sds.o unac.o
 libcwf.a: $(OBJS) $(CRYPT)
 	ar r libcwf.a $(OBJS) $(CRYPT)
 	ranlib libcwf.a
@@ -57,6 +57,10 @@ sqlite3.o: 3dparty/sqlite/sqlite3.c 3dparty/sqlite/sqlite3.h
 
 sds.o: 3dparty/sds/sds.c 3dparty/sds/sds.h
 	gcc $(CFLAGS) -c 3dparty/sds/sds.c
+
+unac.o: 3dparty/unac/unac.c 3dparty/unac/unac.h
+	gcc $(CFLAGS) -c 3dparty/unac/unac.c
+
 
 clean:
 	rm -f *.o *.a */*.o

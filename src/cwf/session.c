@@ -59,6 +59,35 @@ static char *generate_session_id() {
     return (b64);
 }
 
+static inline void hash_bin2hex(char *out, const unsigned char *in, size_t in_len)
+{
+	static const char hexits[17] = "0123456789abcdef";
+	size_t i;
+
+	for(i = 0; i < in_len; i++) {
+		out[i * 2]       = hexits[in[i] >> 4];
+		out[(i * 2) + 1] = hexits[in[i] &  0x0F];
+	}
+}
+
+char *SHA256_from_char_input(char *input) {
+
+	unsigned char sha[32];
+
+	if(!simpleSHA256(input, strlen(input), sha)) {
+		fprintf(stderr, "Error on %s, Line :%d\n", __FILE__, __LINE__);
+		return NULL;
+	}
+	
+	char *out = (char*) malloc(65);
+
+	hash_bin2hex(out, sha, 32);
+	
+	out[64] = '\0';
+
+    return out;
+}
+
 static int sqlite_callback_for_session(void *data, int num_results, char **column_values, char **column_names) {
 
     if(num_results) {

@@ -59,6 +59,7 @@ bin/server
 *.session
 .idea/
 provas/
+provas_django/
 todo_list/cert.pem
 todo_list/cert2.key
 todo_list/key.pem

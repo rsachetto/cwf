@@ -24,4 +24,6 @@ char *cwf_session_get(cwf_session *session, const char *key);
 
 void cwf_session_put(cwf_session *session, const char *key, const char *value);
 
+char *SHA256_from_char_input(char *input);
+
 #endif /* __SESSION_H */

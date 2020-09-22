@@ -15,6 +15,9 @@
 #include "http.h"
 #include "session.h"
 #include "string_macros.h"
+#include "debug_helper.h"
+
+#define LOG_ERROR(format, ...) fprintf(stderr, format, __VA_ARGS__)
 
 #define IS_REQ_GET(request) request->method ? (strcmp(request->method, "GET") == 0) : false
 #define IS_REQ_POST(request) request->method ? (strcmp(request->method, "POST") == 0) : false
@@ -59,11 +62,17 @@
 
 #define render_template(varlist, path) cwf_render_template((varlist), (path), &(cwf_vars->headers))
 
-#define request_to_varlist(varlist, modify_fn) cwf_request_to_varlist((varlist), (modify_fn), cwf_vars->request)
+#define request_to_varlist(varlist, modify_fn) varlist = cwf_request_to_varlist((varlist), (modify_fn), cwf_vars->request)
 
-#define db_record_to_varlist(varlist, modify) cwf_db_record_to_varlist((varlist), cwf_vars->database, (modify))
+#define db_record_to_varlist(varlist, query_result, modify) varlist = cwf_db_record_to_varlist((varlist), query_result, (modify))
 
-#define db_records_to_loop(varlist, loop_name, modify) cwf_db_records_to_loop((varlist), cwf_vars->database, (loop_name), (modify))
+#define db_records_to_loop(varlist, query_result, loop_name, modify) (varlist) = cwf_db_records_to_loop((varlist), (query_result), (loop_name), (modify))
+
+#define db_records_to_simple_json(query_result, modify) cwf_db_records_to_simple_json((query_result), (modify))
+
+#define get_column_value_from_line(query_result, index, name) shget(query_result->result_array[(index)], name)
+
+#define new_query(format, ...) sdscatfmt(sdsempty(), format, __VA_ARGS__)
 
 #define open_database() cwf_open_database(cwf_vars);
 #define open_database_or_return_404()                                                                                                                          \
@@ -76,10 +85,17 @@
 
 #define close_database() cwf_close_database(cwf_vars);
 
-#define execute_query(query) cwf_execute_query((query), cwf_vars->database)
-#define execute_query_or_return_404(query)                                                                                                                     \
+#define execute_query(result, query)                                                                                                                           \
     do {                                                                                                                                                       \
-        execute_query((query));                                                                                                                                \
+        (result) = cwf_execute_query((query), cwf_vars->database);                                                                                             \
+        if(cwf_vars->database->error) {                                                                                                                        \
+            fprintf(stderr, "Database error in %s - %d: %s\n", __FILE__, __LINE__, cwf_vars->database->error);                                                 \
+        }                                                                                                                                                      \
+    } while(0)
+
+#define execute_query_or_return_404(result, query)                                                                                                             \
+    do {                                                                                                                                                       \
+        execute_query((result), (query));                                                                                                                      \
         if(cwf_vars->database->error) {                                                                                                                        \
             return generate_simple_404("Database error: %s", cwf_vars->database->error);                                                                       \
         }                                                                                                                                                      \
@@ -97,12 +113,17 @@
         redirect((redirect_url));                                                                                                                              \
     } while(0)
 
+#define add_to_template_varlist(varlist, name, value) varlist = TMPL_add_var(varlist, name, value, 0)
+#define add_float_to_template_varlist(varlist, name, value) varlist = TMPL_add_float_var(varlist, name, value)
+#define add_int_to_template_varlist(varlist, name, value) varlist = TMPL_add_int_var(varlist, name, value)
+
 typedef enum { INT, STRING, FLOAT, INVALID } parameter_type;
 
 typedef struct {
     char *name;
     char *value;
     parameter_type type;
+	unsigned int num_received_params;
 } url_params;
 
 typedef struct endpoint_config_t {
@@ -116,11 +137,15 @@ typedef struct endpoint_config_item_t {
     endpoint_config *value;
 } endpoint_config_item;
 
+typedef struct cwf_query_result_t {
+    string_hash *result_array;
+    unsigned int num_records;
+} cwf_query_result;
+
 typedef struct cwf_database_t {
     char *error;
     sqlite3 *db;
-    string_hash *records;
-    unsigned int num_records;
+    bool opened;
 } cwf_database;
 
 typedef struct request_item_t {
@@ -150,6 +175,7 @@ typedef struct cwf_vars_t {
     char *database_path;
     char *session_files_path;
     char *templates_path;
+	char *static_path;
     char *document_root;
     bool print_debug_info;
 } cwf_vars;
@@ -173,9 +199,11 @@ sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_h
 
 TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value_fn *modify, cwf_request *req);
 
-TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_database *database, modify_db_name_value_fn *modify);
+TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_query_result *data, modify_db_name_value_fn *modify);
 
-TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_database *database, char *loop_name, modify_db_name_value_fn *f);
+TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *data, char *loop_name, modify_db_name_value_fn *f);
+
+sds cwf_db_records_to_simple_json(cwf_query_result *data, modify_db_name_value_fn *modify);
 
 endpoint_config *new_endpoint_config();
 endpoint_config_item *new_endpoint_config_hash();
@@ -187,7 +215,7 @@ void cwf_open_database(cwf_vars *vars);
 
 void cwf_close_database(cwf_vars *vars);
 
-void cwf_execute_query(const char *query, cwf_database *db);
+cwf_query_result *cwf_execute_query(const char *query, cwf_database *db);
 
 int get_num_columns(string_hash r);
 
