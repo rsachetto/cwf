@@ -260,7 +260,6 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
         sds response_headers = NULL;
 
         if(!headers_end_found) {
-            //fprintf(stderr, "No headers found - sending %s\n", HEADER_INTERNAL_SERVER_ERROR);
 			response_header_returned = HEADER_INTERNAL_SERVER_ERROR;
             send_header(socket, HEADER_INTERNAL_SERVER_ERROR, true, https);
         } else {
@@ -652,9 +651,9 @@ int main(int argc, char *argv[]) {
     start_server(port);
 
     if(https) {
-        printf("HTTPS server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
+        printf("HTTPS server started at port no. %shttp://localhost:%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
     } else {
-        printf("HTTP server started at port no. %s%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
+        printf("HTTP server started at %shttp://localhost:%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
     }
 
     FD_SET(listener, &master);

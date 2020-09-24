@@ -13,10 +13,10 @@ static void rand_str(char *dest, size_t length) {
     char charset[] = "0123456789"
                      "abcdefghijklmnopqrstuvwxyz"
                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                    ":;?@[\\]^_`{|}";
+                     ":;?@[\\]^_`{|}";
 
-    while (length-- > 0) {
-        size_t index = (double) rand() / RAND_MAX * (sizeof charset - 1);
+    while(length-- > 0) {
+        size_t index = (double)rand() / RAND_MAX * (sizeof charset - 1);
         *dest++ = charset[index];
     }
 
@@ -59,31 +59,30 @@ static char *generate_session_id() {
     return (b64);
 }
 
-static inline void hash_bin2hex(char *out, const unsigned char *in, size_t in_len)
-{
-	static const char hexits[17] = "0123456789abcdef";
-	size_t i;
+static inline void hash_bin2hex(char *out, const unsigned char *in, size_t in_len) {
+    static const char hexits[17] = "0123456789abcdef";
+    size_t i;
 
-	for(i = 0; i < in_len; i++) {
-		out[i * 2]       = hexits[in[i] >> 4];
-		out[(i * 2) + 1] = hexits[in[i] &  0x0F];
-	}
+    for(i = 0; i < in_len; i++) {
+        out[i * 2] = hexits[in[i] >> 4];
+        out[(i * 2) + 1] = hexits[in[i] & 0x0F];
+    }
 }
 
 char *SHA256_from_char_input(char *input) {
 
-	unsigned char sha[32];
+    unsigned char sha[32];
 
-	if(!simpleSHA256(input, strlen(input), sha)) {
-		fprintf(stderr, "Error on %s, Line :%d\n", __FILE__, __LINE__);
-		return NULL;
-	}
-	
-	char *out = (char*) malloc(65);
+    if(!simpleSHA256(input, strlen(input), sha)) {
+        fprintf(stderr, "Error on %s, Line :%d\n", __FILE__, __LINE__);
+        return NULL;
+    }
 
-	hash_bin2hex(out, sha, 32);
-	
-	out[64] = '\0';
+    char *out = (char *)malloc(65);
+
+    hash_bin2hex(out, sha, 32);
+
+    out[64] = '\0';
 
     return out;
 }
@@ -132,7 +131,7 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
         int rc = sqlite3_open_v2((*session)->session_filename, &session_file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, NULL);
 
         if(rc != SQLITE_OK) {
-            error = (char*) sqlite3_errmsg(session_file);
+            error = (char *)sqlite3_errmsg(session_file);
             fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - %s\n", __FILE__, __LINE__, error);
             sqlite3_close(session_file);
             return;
@@ -148,9 +147,9 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
         }
 
         sds sql;
-		char *sid = (*session)->cookie->value;
-		
-        sql = sdscatfmt(sdsempty(), "CREATE TABLE IF NOT EXISTS session_data_%s (key TEXT PRIMARY KEY, value TEXT);" , sid);
+        char *sid = (*session)->cookie->value;
+
+        sql = sdscatfmt(sdsempty(), "CREATE TABLE IF NOT EXISTS session_data_%s (key TEXT PRIMARY KEY, value TEXT);", sid);
         rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
         sdsfree(sql);
 
@@ -160,7 +159,7 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
             sqlite3_free(error);
         }
 
-        sql = sdscatfmt(sdsempty(), "SELECT key, value FROM session_data_%s;" , sid);
+        sql = sdscatfmt(sdsempty(), "SELECT key, value FROM session_data_%s;", sid);
         rc = execute_query_for_session(sql, session_file, &(*session)->data, &error);
         sdsfree(sql);
 
@@ -172,9 +171,8 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
         }
 
         sqlite3_close(session_file);
-    }
-    else {
-        //TODO: and do not think this will ever happen
+    } else {
+        // TODO: and do not think this will ever happen
     }
 }
 
@@ -191,7 +189,7 @@ void cwf_session_destroy(cwf_session **session, http_header *headers, char *sess
         (*session)->cookie->expires = -3600 * 24;
         add_cookie_to_header((*session)->cookie, headers);
 
-        sds sql = sdscatfmt(sdsempty(), "DROP TABLE session_data_%s;" , (*session)->cookie->value);
+        sds sql = sdscatfmt(sdsempty(), "DROP TABLE session_data_%s;", (*session)->cookie->value);
         rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
         sdsfree(sql);
 
@@ -213,6 +211,7 @@ void cwf_session_destroy(cwf_session **session, http_header *headers, char *sess
 }
 
 void cwf_save_session(cwf_session *session) {
+   
     if(!session)
         return;
 
@@ -220,7 +219,7 @@ void cwf_save_session(cwf_session *session) {
     int rc = sqlite3_open(session->session_filename, &session_file);
 
     if(rc != SQLITE_OK) {
-        char *error = (char*) sqlite3_errmsg(session_file);
+        char *error = (char *)sqlite3_errmsg(session_file);
         fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - %s\n", __FILE__, __LINE__, error);
         sqlite3_close(session_file);
         return;
@@ -231,12 +230,14 @@ void cwf_save_session(cwf_session *session) {
     sds query = sdsempty();
 
     for(int i = 0; i < len; i++) {
-        query = sdscatprintf(query, "REPLACE INTO session_data_%s (key, value) VALUES('%s', '%s');", session->cookie->value, session->data[i].key, session->data[i].value);
+        query = sdscatfmt(
+            query, "INSERT INTO session_data_%s (key, value) VALUES ('%s', '%s') ON CONFLICT(key) DO UPDATE SET key = '%s', value = '%s' WHERE value <> '%s';",
+            session->cookie->value, session->data[i].key, session->data[i].value, session->data[i].key, session->data[i].value, session->data[i].value);
     }
 
     char *error;
     rc = sqlite3_exec(session_file, query, NULL, NULL, &error);
-
+   
     // TODO handle session errors
     if(rc != SQLITE_OK) {
         fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - %s\n", __FILE__, __LINE__, error);

@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "../../src/3dparty/stb/stb_ds.h"
+
+#include "../../src/3dparty/unac/unac.h"
 #include "../3dparty/ccgi-1.2/ccgi.h"
 #include "../3dparty/ctemplate-1.0/ctemplate.h"
 #include "../3dparty/json/json.h"
@@ -16,8 +19,7 @@
 #include "session.h"
 #include "string_macros.h"
 #include "debug_helper.h"
-
-#define LOG_ERROR(format, ...) fprintf(stderr, format, __VA_ARGS__)
+#include "logger.h"
 
 #define IS_REQ_GET(request) request->method ? (strcmp(request->method, "GET") == 0) : false
 #define IS_REQ_POST(request) request->method ? (strcmp(request->method, "POST") == 0) : false
@@ -68,7 +70,7 @@
 
 #define db_records_to_loop(varlist, query_result, loop_name, modify) (varlist) = cwf_db_records_to_loop((varlist), (query_result), (loop_name), (modify))
 
-#define db_records_to_simple_json(query_result, modify) cwf_db_records_to_simple_json((query_result), (modify))
+#define db_records_to_simple_json(query_result) cwf_db_records_to_simple_json((query_result))
 
 #define get_column_value_from_line(query_result, index, name) shget(query_result->result_array[(index)], name)
 
@@ -89,7 +91,7 @@
     do {                                                                                                                                                       \
         (result) = cwf_execute_query((query), cwf_vars->database);                                                                                             \
         if(cwf_vars->database->error) {                                                                                                                        \
-            fprintf(stderr, "Database error in %s - %d: %s\n", __FILE__, __LINE__, cwf_vars->database->error);                                                 \
+            LOG_ERROR("Database error in %s - %d: %s\n", __FILE__, __LINE__, cwf_vars->database->error);                                                       \
         }                                                                                                                                                      \
     } while(0)
 
@@ -115,6 +117,7 @@
 
 #define add_to_template_varlist(varlist, name, value) varlist = TMPL_add_var(varlist, name, value, 0)
 #define add_float_to_template_varlist(varlist, name, value) varlist = TMPL_add_float_var(varlist, name, value)
+#define add_double_to_template_varlist(varlist, name, value) varlist = TMPL_add_double_var(varlist, name, value)
 #define add_int_to_template_varlist(varlist, name, value) varlist = TMPL_add_int_var(varlist, name, value)
 
 typedef enum { INT, STRING, FLOAT, INVALID } parameter_type;
@@ -203,7 +206,7 @@ TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_query_result *
 
 TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *data, char *loop_name, modify_db_name_value_fn *f);
 
-sds cwf_db_records_to_simple_json(cwf_query_result *data, modify_db_name_value_fn *modify);
+sds cwf_db_records_to_simple_json(cwf_query_result *data);
 
 endpoint_config *new_endpoint_config();
 endpoint_config_item *new_endpoint_config_hash();

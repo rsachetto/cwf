@@ -4,9 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cwf.h"
+
 #define STB_DS_IMPLEMENTATION
 #include "../3dparty/stb/stb_ds.h"
-#include "cwf.h"
 
 static void decode_query(request_item **v, const char *query) {
     char *buf;
@@ -87,10 +88,17 @@ static void get_post(cwf_request *r, int len, char *type) {
 static bool is_int(char *int_char) {
     size_t len = strlen(int_char);
 
-    if(len == 0)
+    if(len == 0) {
         return false;
+    }
 
-    for(int i = 0; i < len; ++i) {
+    int i = 0;
+
+    if(int_char[0] == '-') {
+        i++;
+    }
+
+    for(; i < len; ++i) {
         if(!isdigit(int_char[i])) {
             return false;
         }
@@ -157,7 +165,7 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
     sds err = sdsempty();
     int num_params = 0;
 
-	//QUERY_STRING is empty
+    // QUERY_STRING is empty
     if(QUERY_STRING && !*QUERY_STRING) {
         char *first_slash = strchr(str, '/');
         if(first_slash) {
@@ -215,25 +223,25 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
                     token = strtok(NULL, "/");
                 }
 
-				config->params->num_received_params = num_params;
+                config->params->num_received_params = num_params;
                 free(aux);
 
-				/*
+                /*
                 if(num_params != expected_params) {
                     err = sdscatfmt(err,
                                     "Number of parameters are different from the configured number of parameters (received %i, "
                                     "expected %i).\n",
                                     num_params, expected_params);
                 }*/
-            } 
-			/*
-			else {
+            }
+            /*
+            else {
                 err = sdscatfmt(err,
                                 "Number of parameters are different from the configured number of parameters (received 0, "
                                 "expected %i).\n",
                                 expected_params);
             }
-			*/
+            */
         }
 
     } else {
@@ -252,7 +260,6 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_
     if(sdslen(err) > 0) {
         config->error = err;
     }
-
 
     free(tmp);
     return config;
@@ -367,18 +374,15 @@ char *cwf_server_vars(cwf_request *req, char *key) {
     return shget(req->server_data, key);
 }
 
+// TODO: think about this
 string_array cwf_get_vars(cwf_request *req, char *key) {
-    if(IS_REQ_GET(req)) {
-        return shget(req->urlencoded_data, key);
-    }
-
+    return shget(req->urlencoded_data, key);
     return NULL;
 }
 
+// TODO: think about this
 string_array cwf_post_vars(cwf_request *req, char *key) {
-    if(IS_REQ_POST(req)) {
-        return shget(req->urlencoded_data, key);
-    }
+    return shget(req->urlencoded_data, key);
     return NULL;
 }
 
@@ -420,12 +424,24 @@ void cwf_open_database(cwf_vars *vars) {
     int rc = sqlite3_open(vars->database_path, &(vars->database->db));
 
     if(rc != SQLITE_OK) {
-        vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
-        sqlite3_close(vars->database->db);
-        vars->database->opened = false;
+		vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
+        goto error;
+    }
+
+    rc = sqlite3_exec(vars->database->db, "PRAGMA foreign_keys = ON;", NULL, NULL, &vars->database->error);
+
+	if(rc != SQLITE_OK) {
+        goto error;
     }
 
     vars->database->opened = true;
+	return;
+
+error:
+    sqlite3_close(vars->database->db);
+    vars->database->opened = false;
+	return;
+
 }
 
 void cwf_close_database(cwf_vars *vars) {
@@ -545,10 +561,10 @@ TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *da
 
             sprintf(char_loop_value, "%d", i);
 
-            loop_varlist = TMPL_add_var(loop_varlist, name, value, "loop_counter", char_loop_value);
+            loop_varlist = TMPL_add_var(loop_varlist, name, value, "loop_counter", char_loop_value, 0);
 
             if(i == data->num_records - 1) {
-                loop_varlist = TMPL_add_var(loop_varlist, name, value, "last_record", char_loop_value);
+                loop_varlist = TMPL_add_var(loop_varlist, name, value, "last_record", char_loop_value, 0);
             }
             free(name);
             free(value);
@@ -566,7 +582,7 @@ TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *da
     return varlist;
 }
 
-sds cwf_db_records_to_simple_json(cwf_query_result *data, modify_db_name_value_fn *modify) {
+sds cwf_db_records_to_simple_json(cwf_query_result *data) {
 
     if(!data)
         return sdsnew("[]");
@@ -583,13 +599,26 @@ sds cwf_db_records_to_simple_json(cwf_query_result *data, modify_db_name_value_f
 
         for(int j = 0; j < num_cols; j++) {
             char *name = strdup(data->result_array[i][j].key);
-            char *value = NULL;
+            sds value = NULL;
 
-            if(data->result_array[i][j].value)
-                value = strdup(data->result_array[i][j].value);
+            if(data->result_array[i][j].value) {
+                value = sdsempty();
+                char *tmp = data->result_array[i][j].value;
 
-            if(modify) {
-                modify(&name, &value);
+                while(*tmp) {
+                    if(*tmp == '\r') {
+                        value = sdscat(value, "\\r");
+                    } else if(*tmp == '\n') {
+                        value = sdscat(value, "\\n");
+                    } else if(*tmp == '\\') {
+                        value = sdscat(value, "\\\\");
+                    } else if(*tmp == '\"') {
+                        value = sdscat(value, "\\\"");
+                    } else {
+                        value = sdscatprintf(value, "%c", *tmp);
+                    }
+                    tmp++;
+                }
             }
 
             if(j == num_cols - 1) {
@@ -599,7 +628,7 @@ sds cwf_db_records_to_simple_json(cwf_query_result *data, modify_db_name_value_f
             }
 
             free(name);
-            free(value);
+            sdsfree(value);
         }
 
         if(i == num_records - 1) {

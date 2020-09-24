@@ -1,14 +1,14 @@
-.PHONY = all debug release server cwf clean --debug_set --release_set
+.PHONY = all debug release server cwf clean debug_set release_set
 
 all: release
 
-debug: --debug_set server cwf
-release: --release_set server cwf
+debug: debug_set server cwf
+release: release_set server cwf
 
---release_set:
-	$(eval OPT_FLAGS=-O2)
+release_set:
+	$(eval OPT_FLAGS=-O3)
 
---debug_set:
+debug_set:
 	$(eval OPT_FLAGS=-g3)
 	$(eval ENABLE_BACKTRACE=-DENABLE_BACKTRACE)
 
