@@ -62,7 +62,7 @@
         return cwf_dump_request_vars(cwf_vars->request);                                                                                                       \
     } while(0)
 
-#define render_template(varlist, path) cwf_render_template((varlist), (path), &(cwf_vars->headers))
+#define render_template(varlist, filename) cwf_render_template((varlist), (filename), cwf_vars)
 
 #define request_to_varlist(varlist, modify_fn) varlist = cwf_request_to_varlist((varlist), (modify_fn), cwf_vars->request)
 
@@ -198,7 +198,7 @@ string_array cwf_post_vars(cwf_request *req, char *key);
 
 sds cwf_dump_request_vars(cwf_request *req);
 
-sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_header *headers);
+sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, cwf_vars *vars);
 
 TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value_fn *modify, cwf_request *req);
 
@@ -211,7 +211,7 @@ sds cwf_db_records_to_simple_json(cwf_query_result *data);
 endpoint_config *new_endpoint_config();
 endpoint_config_item *new_endpoint_config_hash();
 void free_endpoint_config_hash(endpoint_config_item *hash);
-endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *configs);
+endpoint_config *get_endpoint_config(const char *REQUEST_URI, endpoint_config_item *configs);
 void add_params_to_request(cwf_request *req, url_params *params);
 
 void cwf_open_database(cwf_vars *vars);

@@ -150,118 +150,144 @@ void free_endpoint_config_hash(endpoint_config_item *hash) {
     shfree(hash);
 }
 
-endpoint_config *get_endpoint_config(const char *REQUEST_URI, const char *QUERY_STRING, endpoint_config_item *endpoints_cfg) {
-    char *str = (char *)REQUEST_URI;
+static inline endpoint_config *probe_for_config(endpoint_config_item *endpoints_cfg, const char *uri, char **config_url) {
+    if(strlen(uri) == 1) {
+        return shget(endpoints_cfg, "/");
+    } else {
 
-    endpoint_config *config;
-    char *tmp = NULL;
+        char *question_mark = strchr(uri, '?');
+        char *endpoint_name = NULL;
 
-    size_t uri_len = strlen(REQUEST_URI);
+        if(question_mark) {
+            int q_index = (int)(question_mark - uri);
+            endpoint_name = strndup(uri, q_index);
 
-    if(uri_len > 1) {
-        str = str + 1;
+            if(!*endpoint_name) {
+                free(endpoint_name);
+                endpoint_name = strdup("/");
+            }
+        } else {
+            endpoint_name = strdup(uri);
+        }
+
+        endpoint_config *c = NULL;
+
+		int num_slashes;
+		sds *splitted_url = sdssplitlen(endpoint_name, strlen(endpoint_name), "/", 1, &num_slashes);
+
+		sds endpoint_name_try = sdsempty();
+
+		for(int i = 0; i < num_slashes; i++) {
+			if(*splitted_url[i]) {
+				endpoint_name_try = sdscatfmt(endpoint_name_try, "%S/", splitted_url[i]);
+        	    char *tmp = strndup(endpoint_name_try, sdslen(endpoint_name_try) - 1);
+				c = shget(endpoints_cfg, tmp);
+				if(c) {
+					*config_url = tmp;
+					break;
+				}
+
+				free(tmp);
+			}
+		}
+			
+        free(endpoint_name);
+        return c;
     }
+
+    return NULL;
+}
+
+endpoint_config *get_endpoint_config(const char *REQUEST_URI, endpoint_config_item *endpoints_cfg) {
+	
+	char *config_url = NULL;
+
+    endpoint_config *config = probe_for_config(endpoints_cfg, REQUEST_URI, &config_url);
 
     sds err = sdsempty();
     int num_params = 0;
 
-    // QUERY_STRING is empty
-    if(QUERY_STRING && !*QUERY_STRING) {
-        char *first_slash = strchr(str, '/');
+    if(config && config->params) {
+
+        int expected_params = arrlen(config->params);
+
+		char *tmp  = (char*)REQUEST_URI + 1;
+
+		int count = 0;
+		while(*tmp != config_url[count]) {
+			tmp++;
+			count++;
+		}
+
+		char *first_slash = strchr(tmp, '/');
+
         if(first_slash) {
-            if(uri_len > 1) {
-                tmp = strndup(str, (int)(first_slash - str));
-            } else {
-                tmp = strdup(str);
-            }
-        } else {
-            tmp = strdup(str);
-        }
+            char *aux = strdup(first_slash + 1);
 
-        config = shget(endpoints_cfg, tmp);
+            char *token;
+            token = strtok(aux, "/");
 
-        if(config && config->params) {
-            int expected_params = arrlen(config->params);
-
-            if(first_slash) {
-                char *aux = strdup(first_slash + 1);
-
-                char *token;
-                token = strtok(aux, "/");
-
-                while(token != NULL) {
-                    url_params url_params;
-                    if(num_params < expected_params) {
-                        url_params = config->params[num_params];
-                    } else {
-                        err = sdscatfmt(err, "Number of parameters exceed the configured number of parameters (%i).\n", expected_params);
-                        break;
-                    }
-
-                    switch(url_params.type) {
-                    case STRING:
-                        break;
-                    case INT:
-                        if(!is_int(token)) {
-                            err = sdscatfmt(err, "%s is configured to be an integer but %s is not a valid integer.\n", url_params.name, token);
-                        }
-                        break;
-                    case FLOAT:
-                        if(!is_float(token)) {
-                            err = sdscatfmt(err, "%s is configured to be a float but %s is not a valid float.\n", url_params.name, token);
-                        }
-                        break;
-                    default:
-                        err = sdscatfmt(err, "%s is configured to an invalid type. Valid types are i, s or f.\n", url_params.name);
-                        break;
-                    }
-
-                    config->params[num_params].value = strdup(token);
-
-                    num_params++;
-
-                    token = strtok(NULL, "/");
+            while(token != NULL) {
+                url_params url_params;
+                if(num_params < expected_params) {
+                    url_params = config->params[num_params];
+                } else {
+                    err = sdscatfmt(err, "Number of parameters exceed the configured number of parameters (%i).\n", expected_params);
+                    break;
                 }
 
-                config->params->num_received_params = num_params;
-                free(aux);
+                switch(url_params.type) {
+                case STRING:
+                    break;
+                case INT:
+                    if(!is_int(token)) {
+                        err = sdscatfmt(err, "%s is configured to be an integer but %s is not a valid integer.\n", url_params.name, token);
+                    }
+                    break;
+                case FLOAT:
+                    if(!is_float(token)) {
+                        err = sdscatfmt(err, "%s is configured to be a float but %s is not a valid float.\n", url_params.name, token);
+                    }
+                    break;
+                default:
+                    err = sdscatfmt(err, "%s is configured to an invalid type. Valid types are i, s or f.\n", url_params.name);
+                    break;
+                }
 
-                /*
-                if(num_params != expected_params) {
-                    err = sdscatfmt(err,
-                                    "Number of parameters are different from the configured number of parameters (received %i, "
-                                    "expected %i).\n",
-                                    num_params, expected_params);
-                }*/
+                config->params[num_params].value = strdup(token);
+
+                num_params++;
+
+                token = strtok(NULL, "/");
             }
+
+            config->params->num_received_params = num_params;
+            free(aux);
+
             /*
-            else {
+            if(num_params != expected_params) {
                 err = sdscatfmt(err,
-                                "Number of parameters are different from the configured number of parameters (received 0, "
+                                "Number of parameters are different from the configured number of parameters (received %i, "
                                 "expected %i).\n",
-                                expected_params);
-            }
-            */
+                                num_params, expected_params);
+            }*/
         }
-
-    } else {
-        char *question_mark = strchr(str, '?');
-        int q_index = (int)(question_mark - str);
-        tmp = strndup(str, q_index);
-
-        if(!*tmp) {
-            free(tmp);
-            tmp = strdup("/");
+        /*
+        else {
+            err = sdscatfmt(err,
+                            "Number of parameters are different from the configured number of parameters (received 0, "
+                            "expected %i).\n",
+                            expected_params);
         }
-
-        config = shget(endpoints_cfg, tmp);
+        */
     }
 
     if(sdslen(err) > 0) {
         config->error = err;
     }
 
-    free(tmp);
+	free(config_url);
+
     return config;
 }
 
@@ -398,8 +424,9 @@ sds cwf_dump_request_vars(cwf_request *req) {
     return response;
 }
 
-sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_header *headers) {
-    add_custom_header("Content-type", "text/html", headers);
+sds cwf_render_template(TMPL_varlist *varlist, const char *template_file, cwf_vars *cwf_vars) {
+
+    add_custom_header("Content-type", "text/html", &(cwf_vars->headers));
 
     TMPL_fmtlist *fmtlist;
     fmtlist = TMPL_add_fmt(0, "entity", TMPL_encode_entity);
@@ -407,10 +434,15 @@ sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, http_h
 
     sds template_str = sdsempty();
 
+    sds template_path = sdsnew(cwf_vars->templates_path);
+    template_path = sdscat(template_path, template_file);
+
     int ret = TMPL_write(template_path, 0, fmtlist, varlist, &template_str, NULL, stderr) != 0;
 
     TMPL_free_fmtlist(fmtlist);
     TMPL_free_varlist(varlist);
+
+    sdsfree(template_path);
 
     return template_str;
 }
@@ -424,24 +456,23 @@ void cwf_open_database(cwf_vars *vars) {
     int rc = sqlite3_open(vars->database_path, &(vars->database->db));
 
     if(rc != SQLITE_OK) {
-		vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
+        vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
         goto error;
     }
 
     rc = sqlite3_exec(vars->database->db, "PRAGMA foreign_keys = ON;", NULL, NULL, &vars->database->error);
 
-	if(rc != SQLITE_OK) {
+    if(rc != SQLITE_OK) {
         goto error;
     }
 
     vars->database->opened = true;
-	return;
+    return;
 
 error:
     sqlite3_close(vars->database->db);
     vars->database->opened = false;
-	return;
-
+    return;
 }
 
 void cwf_close_database(cwf_vars *vars) {
@@ -449,7 +480,8 @@ void cwf_close_database(cwf_vars *vars) {
 }
 
 static int sqlite_callback(void *void_result, int num_results, char **column_values, char **column_names) {
-    if(num_results) {
+
+	if(num_results) {
         cwf_query_result *result = (cwf_query_result *)void_result;
 
         string_hash line = NULL;
@@ -491,7 +523,9 @@ cwf_query_result *cwf_execute_query(const char *query, cwf_database *database) {
         database->error = strdup(errmsg);
         sqlite3_close(database->db);
         sqlite3_free(errmsg);
+		return NULL;
     }
+
     return result;
 }
 

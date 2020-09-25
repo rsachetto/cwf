@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         char *uri = SERVER("REQUEST_URI");
         char *query_string = SERVER("QUERY_STRING");
 
-        endpoint_config *endpoint_config = get_endpoint_config(uri, query_string, endpoint_configs);
+        endpoint_config *endpoint_config = get_endpoint_config(uri, endpoint_configs);
 
         char *endpoint_name = NULL;
 
