@@ -511,6 +511,8 @@ void respond(int client_socket, bool https, bool verbose) {
                                 server_write(socket_pointer, data_to_send, bytes_read, https);
                             }
 
+							close(fd);
+
                         } else {
                             send_header(socket_pointer, HEADER_NOT_FOUND, true, https);
 							response_header_returned = HEADER_NOT_FOUND;

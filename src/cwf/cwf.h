@@ -202,6 +202,8 @@ sds cwf_render_template(TMPL_varlist *varlist, const char *template_path, cwf_va
 
 TMPL_varlist *cwf_request_to_varlist(TMPL_varlist *varlist, modify_db_name_value_fn *modify, cwf_request *req);
 
+sds cwf_escape_json(char *value);
+
 TMPL_varlist *cwf_db_record_to_varlist(TMPL_varlist *varlist, cwf_query_result *data, modify_db_name_value_fn *modify);
 
 TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *data, char *loop_name, modify_db_name_value_fn *f);

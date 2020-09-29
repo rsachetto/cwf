@@ -172,25 +172,25 @@ static inline endpoint_config *probe_for_config(endpoint_config_item *endpoints_
 
         endpoint_config *c = NULL;
 
-		int num_slashes;
-		sds *splitted_url = sdssplitlen(endpoint_name, strlen(endpoint_name), "/", 1, &num_slashes);
+        int num_slashes;
+        sds *splitted_url = sdssplitlen(endpoint_name, strlen(endpoint_name), "/", 1, &num_slashes);
 
-		sds endpoint_name_try = sdsempty();
+        sds endpoint_name_try = sdsempty();
 
-		for(int i = 0; i < num_slashes; i++) {
-			if(*splitted_url[i]) {
-				endpoint_name_try = sdscatfmt(endpoint_name_try, "%S/", splitted_url[i]);
-        	    char *tmp = strndup(endpoint_name_try, sdslen(endpoint_name_try) - 1);
-				c = shget(endpoints_cfg, tmp);
-				if(c) {
-					*config_url = tmp;
-					break;
-				}
+        for(int i = 0; i < num_slashes; i++) {
+            if(*splitted_url[i]) {
+                endpoint_name_try = sdscatfmt(endpoint_name_try, "%S/", splitted_url[i]);
+                char *tmp = strndup(endpoint_name_try, sdslen(endpoint_name_try) - 1);
+                c = shget(endpoints_cfg, tmp);
+                if(c) {
+                    *config_url = tmp;
+                    break;
+                }
 
-				free(tmp);
-			}
-		}
-			
+                free(tmp);
+            }
+        }
+
         free(endpoint_name);
         return c;
     }
@@ -199,8 +199,8 @@ static inline endpoint_config *probe_for_config(endpoint_config_item *endpoints_
 }
 
 endpoint_config *get_endpoint_config(const char *REQUEST_URI, endpoint_config_item *endpoints_cfg) {
-	
-	char *config_url = NULL;
+
+    char *config_url = NULL;
 
     endpoint_config *config = probe_for_config(endpoints_cfg, REQUEST_URI, &config_url);
 
@@ -211,15 +211,15 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, endpoint_config_it
 
         int expected_params = arrlen(config->params);
 
-		char *tmp  = (char*)REQUEST_URI + 1;
+        char *tmp = (char *)REQUEST_URI + 1;
 
-		int count = 0;
-		while(*tmp != config_url[count]) {
-			tmp++;
-			count++;
-		}
+        int count = 0;
+        while(*tmp != config_url[count]) {
+            tmp++;
+            count++;
+        }
 
-		char *first_slash = strchr(tmp, '/');
+        char *first_slash = strchr(tmp, '/');
 
         if(first_slash) {
             char *aux = strdup(first_slash + 1);
@@ -286,7 +286,7 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, endpoint_config_it
         config->error = err;
     }
 
-	free(config_url);
+    free(config_url);
 
     return config;
 }
@@ -390,7 +390,7 @@ cwf_request *new_from_env_vars() {
         }
 
         get_post(req, len, req->data_type);
-        req->data_len = len;
+        req->data_len = shlen(req->urlencoded_data);
     }
 
     return req;
@@ -481,7 +481,7 @@ void cwf_close_database(cwf_vars *vars) {
 
 static int sqlite_callback(void *void_result, int num_results, char **column_values, char **column_names) {
 
-	if(num_results) {
+    if(num_results) {
         cwf_query_result *result = (cwf_query_result *)void_result;
 
         string_hash line = NULL;
@@ -523,7 +523,7 @@ cwf_query_result *cwf_execute_query(const char *query, cwf_database *database) {
         database->error = strdup(errmsg);
         sqlite3_close(database->db);
         sqlite3_free(errmsg);
-		return NULL;
+        return NULL;
     }
 
     return result;
@@ -616,6 +616,29 @@ TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *da
     return varlist;
 }
 
+sds cwf_escape_json(char *value) {
+
+    sds return_value = sdsempty();
+    char *tmp = value;
+
+    while(*tmp) {
+        if(*tmp == '\r') {
+            return_value = sdscat(return_value, "\\r");
+        } else if(*tmp == '\n') {
+            return_value = sdscat(return_value, "\\n");
+        } else if(*tmp == '\\') {
+            return_value = sdscat(return_value, "\\\\");
+        } else if(*tmp == '\"') {
+            return_value = sdscat(return_value, "\\\"");
+        } else {
+            return_value = sdscatprintf(return_value, "%c", *tmp);
+        }
+        tmp++;
+    }
+
+    return return_value;
+}
+
 sds cwf_db_records_to_simple_json(cwf_query_result *data) {
 
     if(!data)
@@ -636,23 +659,7 @@ sds cwf_db_records_to_simple_json(cwf_query_result *data) {
             sds value = NULL;
 
             if(data->result_array[i][j].value) {
-                value = sdsempty();
-                char *tmp = data->result_array[i][j].value;
-
-                while(*tmp) {
-                    if(*tmp == '\r') {
-                        value = sdscat(value, "\\r");
-                    } else if(*tmp == '\n') {
-                        value = sdscat(value, "\\n");
-                    } else if(*tmp == '\\') {
-                        value = sdscat(value, "\\\\");
-                    } else if(*tmp == '\"') {
-                        value = sdscat(value, "\\\"");
-                    } else {
-                        value = sdscatprintf(value, "%c", *tmp);
-                    }
-                    tmp++;
-                }
+     			value = cwf_escape_json(data->result_array[i][j].value);
             }
 
             if(j == num_cols - 1) {
