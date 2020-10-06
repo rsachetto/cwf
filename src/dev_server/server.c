@@ -240,7 +240,7 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
             } else if(count == 0) {
                 break;
             } else {
-                response_from_child = sdscat(response_from_child, buffer);
+                response_from_child = sdscatlen(response_from_child, buffer, count);
                 int len = sdslen(response_from_child);
 
                 if(len >= 4) {
@@ -346,8 +346,7 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
                 } else if(count == 0) {
                     break;
                 } else {
-                    response_buffer[count] = '\0';
-                    response_content = sdscat(response_content, response_buffer);
+                    response_content = sdscatlen(response_content, response_buffer, count);
                 }
             }
 
@@ -444,7 +443,7 @@ void respond(int client_socket, bool https, bool verbose) {
 
     // TODO: this is only the header. We need to read more after we get the content-length. This will be necessary when reading POST data;
     while((rcvd = server_read(socket_pointer, mesg, 1, https)) > 0) {
-        request = sdscat(request, mesg);
+        request = sdscatlen(request, mesg, rcvd);
         int len = sdslen(request);
         if(len >= 4) {
             bool header_end = (request[len - 4] == '\r' && request[len - 3] == '\n' && request[len - 2] == '\r' && request[len - 1] == '\n');
@@ -537,8 +536,9 @@ void respond(int client_socket, bool https, bool verbose) {
 
                     while(received_data < content_length) {
                         rcvd = server_read(socket_pointer, buff, bytes_to_read, https);
-                        request_content = sdscat(request_content, buff);
+                        request_content = sdscatlen(request_content, buff, rcvd);
                         received_data += rcvd;
+
                     }
 
                     if(rcvd < 0) { // receive error

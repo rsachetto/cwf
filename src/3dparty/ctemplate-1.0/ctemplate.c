@@ -1130,6 +1130,23 @@ static void walk(template *t, tagnode *tag, const TMPL_varlist *varlist) {
         /* if first visit, open and parse the included file */
 
         if((t2 = tag->tag.include.tmpl) == 0) {
+			if(strncasecmp(tag->tag.include.filename, "<TMPL_VAR", 9) == 0) {
+				//The template file name is a TMPL_var
+				
+				char *tmp = (char*) tag->tag.include.filename;
+				
+				while(*tmp != '<') tmp++;
+
+				sds new_filename = sdsnew(".../");
+			    TMPL_write(NULL, tmp, NULL, varlist, &new_filename, NULL, stderr);
+
+				free((void*)tag->tag.include.filename);
+
+				tag->tag.include.filename = strdup(new_filename);
+				sdsfree(new_filename);
+
+			}
+
             newfile = newfilename(tag->tag.include.filename, t->filename);
             t2 = newtemplate(newfile, 0, t->fmtlist, t->out_string, t->out, t->errout);
             if(t2 == 0) {

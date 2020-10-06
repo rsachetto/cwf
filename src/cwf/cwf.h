@@ -74,7 +74,13 @@
 
 #define get_column_value_from_line(query_result, index, name) shget(query_result->result_array[(index)], name)
 
-#define new_query(format, ...) sdscatfmt(sdsempty(), format, __VA_ARGS__)
+#define last_insert_rowid() sqlite3_last_insert_rowid(cwf_vars->database->db)
+
+#define new_query(format, ...) sdscatprintf(sdsempty(), format, __VA_ARGS__)
+
+#define begin_transaction() cwf_begin_transaction(cwf_vars)
+#define commit_transaction() cwf_commit_transaction(cwf_vars)
+#define rollback_transaction() cwf_rollback_transaction(cwf_vars)
 
 #define open_database() cwf_open_database(cwf_vars);
 #define open_database_or_return_404()                                                                                                                          \
@@ -91,7 +97,7 @@
     do {                                                                                                                                                       \
         (result) = cwf_execute_query((query), cwf_vars->database);                                                                                             \
         if(cwf_vars->database->error) {                                                                                                                        \
-            LOG_ERROR("Database error in %s - %d: %s\n", __FILE__, __LINE__, cwf_vars->database->error);                                                       \
+            LOG_ERROR("Error while executing query %s in %s - %d: %s\n", query, __FILE__, __LINE__, cwf_vars->database->error);                                \
         }                                                                                                                                                      \
     } while(0)
 
@@ -211,12 +217,22 @@ TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *da
 sds cwf_db_records_to_simple_json(cwf_query_result *data);
 
 endpoint_config *new_endpoint_config();
+
 endpoint_config_item *new_endpoint_config_hash();
+
 void free_endpoint_config_hash(endpoint_config_item *hash);
+
 endpoint_config *get_endpoint_config(const char *REQUEST_URI, endpoint_config_item *configs);
+
 void add_params_to_request(cwf_request *req, url_params *params);
 
 void cwf_open_database(cwf_vars *vars);
+
+void cwf_begin_transaction(cwf_vars *vars);
+
+void cwf_commit_transaction(cwf_vars *vars);
+
+void cwf_rollback_transaction(cwf_vars *vars) ;
 
 void cwf_close_database(cwf_vars *vars);
 
