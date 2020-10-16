@@ -2,12 +2,13 @@
 #define __SERVER_H
 
 #include <stdbool.h>
-#include <unistd.h>
 #include <sys/socket.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
+#include "../3dparty/sds/sds.h"
 #include "mimetypes.h"
 #include "ssl_helper.h"
-#include "../3dparty/sds/sds.h"
 
 #define STB_DS_IMPLEMENTATION
 #include "../3dparty/stb/stb_ds.h"
@@ -23,6 +24,18 @@
 #define HEADER_REDIRECT SERVER_PROTOCOL " 302 Found"
 
 #define MAX_BUFFER_SIZE 1024
+
+struct static_file {
+    struct stat st;
+    char *data;
+};
+
+struct cache_entry {
+	char *key;
+	struct static_file value;
+};
+
+typedef struct cache_entry * file_cache;
 
 struct mime_type {
     char *key;   // file extension

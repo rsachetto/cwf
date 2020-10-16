@@ -4,10 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 #include "server.h"
 
@@ -17,7 +18,9 @@ sds cert_file, key_file;
 int listener;
 struct mime_type *mime_types;
 static char *response_header_returned = NULL;
+struct static_file file_not_in_cache = (struct static_file){{0}, 0};
 
+file_cache cache = NULL;
 
 static const char *get_filename_ext(const char *filename) {
     const char *dot = strrchr(filename, '.'); // Return the last ocurrency of the .
@@ -254,13 +257,13 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
 
         bool header_error = false;
         sds status_msg = sdsnew(HEADER_OK);
-		response_header_returned = HEADER_OK;
+        response_header_returned = HEADER_OK;
         int status_index = -1;
 
         sds response_headers = NULL;
 
         if(!headers_end_found) {
-			response_header_returned = HEADER_INTERNAL_SERVER_ERROR;
+            response_header_returned = HEADER_INTERNAL_SERVER_ERROR;
             send_header(socket, HEADER_INTERNAL_SERVER_ERROR, true, https);
         } else {
             int lines_count;
@@ -284,23 +287,20 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
                     status_index = i;
                     sdsfree(status_msg);
                     status_msg = sdscatfmt(sdsempty(), "HTTP/1.0 %s", key_value[1]);
-					
-					if(strncmp(key_value[1], "200", 3) == 0) {
-						response_header_returned = HEADER_OK;
-					}
-					else if(strncmp(key_value[1], "404", 3) == 0) {
-						response_header_returned = HEADER_NOT_FOUND;
-					}
-					else if(strncmp(key_value[1], "400", 3) == 0) {
-						response_header_returned = HEADER_BAD_REQUEST;
-					}
-					else if(strncmp(key_value[1], "500", 3) == 0) {
-						response_header_returned = HEADER_INTERNAL_SERVER_ERROR;
-					}					
+
+                    if(strncmp(key_value[1], "200", 3) == 0) {
+                        response_header_returned = HEADER_OK;
+                    } else if(strncmp(key_value[1], "404", 3) == 0) {
+                        response_header_returned = HEADER_NOT_FOUND;
+                    } else if(strncmp(key_value[1], "400", 3) == 0) {
+                        response_header_returned = HEADER_BAD_REQUEST;
+                    } else if(strncmp(key_value[1], "500", 3) == 0) {
+                        response_header_returned = HEADER_INTERNAL_SERVER_ERROR;
+                    }
                 } else if(strncasecmp(key_value[0], "Location", 8) == 0) {
                     sdsfree(status_msg);
                     status_msg = sdsnew(HEADER_REDIRECT);
-					response_header_returned = HEADER_REDIRECT;
+                    response_header_returned = HEADER_REDIRECT;
                 }
 
                 sdsfreesplitres(key_value, pair_count);
@@ -308,7 +308,7 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
 
             if(header_error) {
                 send_header(socket, HEADER_INTERNAL_SERVER_ERROR, true, https);
-				response_header_returned = HEADER_INTERNAL_SERVER_ERROR;
+                response_header_returned = HEADER_INTERNAL_SERVER_ERROR;
             } else {
                 response_headers = sdsempty();
 
@@ -373,6 +373,7 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
             sdsfree(content_length_header);
         }
         close(PARENT_READ);
+        close(PARENT_WRITE);
         wait(0);
     }
 }
@@ -453,6 +454,7 @@ void respond(int client_socket, bool https, bool verbose) {
     }
 
     bool error = false;
+    struct stat st;
 
     if(rcvd < 0) { // receive error
         fprintf(stderr, ("recv() error\n"));
@@ -467,7 +469,7 @@ void respond(int client_socket, bool https, bool verbose) {
 
         if(method_uri_version_count != 3) {
             send_header(socket_pointer, HEADER_BAD_REQUEST, true, https);
-			response_header_returned = HEADER_BAD_REQUEST;
+            response_header_returned = HEADER_BAD_REQUEST;
         } else {
             char *method = method_uri_version[0];
             char *uri = method_uri_version[1];
@@ -476,21 +478,37 @@ void respond(int client_socket, bool https, bool verbose) {
             if(strncmp(http_version, "HTTP/1.0", 8) != 0 && strncmp(http_version, "HTTP/1.1", 8) != 0) {
                 // TODO: check for an ssl option
                 send_header(socket_pointer, HEADER_BAD_REQUEST, true, https);
-				response_header_returned = HEADER_BAD_REQUEST;
+                response_header_returned = HEADER_BAD_REQUEST;
             } else {
                 if(strncmp(method, "GET", 3) == 0) {
                     if((strncmp(uri, "/static/", 8) == 0) || (strncmp(uri, "/media/", 7) == 0) || (strncmp(uri, "/favicon.ico", 11) == 0)) {
                         path = sdscat(path, uri);
 
-                        if((fd = open(path, O_RDONLY)) != -1) {
-                            struct stat st;
-                            stat(path, &st);
-                            size_t size = st.st_size;
+                        struct static_file cached_file = shget(cache, path);
+
+                        if(cached_file.data == NULL) {
+                            if((fd = open(path, O_RDONLY)) != -1) {
+                                stat(path, &st);
+
+                                size_t to_page_size = st.st_size;
+
+                                int pagesize = getpagesize();
+                                to_page_size += pagesize - (to_page_size % pagesize);
+
+                                cached_file.data = (char *)mmap(0, to_page_size, PROT_READ, MAP_PRIVATE, fd, 0);
+								
+                                cached_file.st = st;
+                                shput(cache, path, cached_file);
+                                close(fd);
+                            }
+                        }
+
+                        if(cached_file.data) {
 
                             send_header(socket_pointer, HEADER_OK, false, https);
-							response_header_returned = HEADER_OK;
+                            response_header_returned = HEADER_OK;
 
-                            sds content_length_header = sdscatprintf(sdsempty(), "Content-Length: %ld", size);
+                            sds content_length_header = sdscatprintf(sdsempty(), "Content-Length: %ld", cached_file.st.st_size);
                             sds content_type_header = sdsempty();
                             char *mime_type = shget(mime_types, get_filename_ext(path));
 
@@ -506,15 +524,11 @@ void respond(int client_socket, bool https, bool verbose) {
                             sdsfree(content_length_header);
                             sdsfree(content_type_header);
 
-                            while((bytes_read = read(fd, data_to_send, MAX_BUFFER_SIZE)) > 0) {
-                                server_write(socket_pointer, data_to_send, bytes_read, https);
-                            }
-
-							close(fd);
+                            server_write(socket_pointer, cached_file.data, cached_file.st.st_size, https);
 
                         } else {
                             send_header(socket_pointer, HEADER_NOT_FOUND, true, https);
-							response_header_returned = HEADER_NOT_FOUND;
+                            response_header_returned = HEADER_NOT_FOUND;
                         }
                     } else {
                         execute_cgi(socket_pointer, request_lines, NULL, lines_count, https, verbose);
@@ -538,7 +552,6 @@ void respond(int client_socket, bool https, bool verbose) {
                         rcvd = server_read(socket_pointer, buff, bytes_to_read, https);
                         request_content = sdscatlen(request_content, buff, rcvd);
                         received_data += rcvd;
-
                     }
 
                     if(rcvd < 0) { // receive error
@@ -553,7 +566,7 @@ void respond(int client_socket, bool https, bool verbose) {
 
                 } else {
                     send_header(socket_pointer, HEADER_BAD_REQUEST, true, https);
-					response_header_returned = HEADER_BAD_REQUEST;
+                    response_header_returned = HEADER_BAD_REQUEST;
                 }
             }
         }
@@ -570,16 +583,17 @@ void respond(int client_socket, bool https, bool verbose) {
     secs_used = (end.tv_sec - start.tv_sec); // avoid overflow by subtracting first
     micros_used = ((secs_used * 1000000) + end.tv_usec) - (start.tv_usec);
     if(!error) {
-		if(response_header_returned == HEADER_BAD_REQUEST || response_header_returned == HEADER_NOT_FOUND) {
-	        fprintf(stderr, "\033[1;31m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned+9, micros_used / 1000);
-		}
-		else if(response_header_returned == HEADER_REDIRECT) {
-	        fprintf(stderr, "\033[1;33m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned+9, micros_used / 1000);
-		}
-		else {
-	        fprintf(stderr, "\033[1;34m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned+9, micros_used / 1000);
-		}
-	}
+        if(response_header_returned == HEADER_BAD_REQUEST || response_header_returned == HEADER_NOT_FOUND) {
+            fprintf(stderr, "\033[1;31m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned + 9,
+                    micros_used / 1000);
+        } else if(response_header_returned == HEADER_REDIRECT) {
+            fprintf(stderr, "\033[1;33m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned + 9,
+                    micros_used / 1000);
+        } else {
+            fprintf(stderr, "\033[1;34m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned + 9,
+                    micros_used / 1000);
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -599,6 +613,9 @@ int main(int argc, char *argv[]) {
     bool https = false;
 
     ROOT = getenv("PWD");
+
+    shdefault(cache, file_not_in_cache);
+    sh_new_strdup(cache);
 
     int port = 8080;
 
@@ -653,7 +670,8 @@ int main(int argc, char *argv[]) {
     start_server(port);
 
     if(https) {
-        printf("HTTPS server started at port no. %shttp://localhost:%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
+        printf("HTTPS server started at port no. %shttp://localhost:%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT,
+               "\033[0m");
     } else {
         printf("HTTP server started at %shttp://localhost:%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
     }

@@ -77,7 +77,7 @@ static void get_post(cwf_request *r, int len, char *type) {
     if(fread(buf, 1, len, stdin) == len) {
         buf[len] = 0;
         if(strncmp(type, "urlencoded", 10) == 0) {
-			//fprintf(stderr, "%d %s\n", len, buf);
+            // fprintf(stderr, "%d %s\n", len, buf);
             decode_query(&(r->urlencoded_data), buf);
         } else if(strncmp(type, "json", 4) == 0) {
             r->json_data = json_parse((json_char *)buf, len);
@@ -221,6 +221,8 @@ endpoint_config *get_endpoint_config(const char *REQUEST_URI, endpoint_config_it
         }
 
         char *first_slash = strchr(tmp, '/');
+
+        config->params->num_received_params = 0;
 
         if(first_slash) {
             char *aux = strdup(first_slash + 1);
@@ -478,10 +480,10 @@ error:
 
 void cwf_begin_transaction(cwf_vars *vars) {
 
-	if(!vars->database->opened) {
-		vars->database->error = strdup("Database not opened. Call open_database first!\n");
+    if(!vars->database->opened) {
+        vars->database->error = strdup("Database not opened. Call open_database first!\n");
         return;
-	}
+    }
 
     int rc = sqlite3_exec(vars->database->db, "BEGIN TRANSACTION;", NULL, NULL, &vars->database->error);
 
@@ -492,14 +494,12 @@ void cwf_begin_transaction(cwf_vars *vars) {
     return;
 }
 
-
 void cwf_commit_transaction(cwf_vars *vars) {
 
-	if(!vars->database->opened) {
-		vars->database->error = strdup("Database not opened. Call open_database first!\n");
+    if(!vars->database->opened) {
+        vars->database->error = strdup("Database not opened. Call open_database first!\n");
         return;
-	}
-
+    }
 
     int rc = sqlite3_exec(vars->database->db, "COMMIT TRANSACTION;", NULL, NULL, &vars->database->error);
 
@@ -512,11 +512,10 @@ void cwf_commit_transaction(cwf_vars *vars) {
 
 void cwf_rollback_transaction(cwf_vars *vars) {
 
-	if(!vars->database->opened) {
-		vars->database->error = strdup("Database not opened. Call open_database first!\n");
+    if(!vars->database->opened) {
+        vars->database->error = strdup("Database not opened. Call open_database first!\n");
         return;
-	}
-
+    }
 
     int rc = sqlite3_exec(vars->database->db, "ROLLBACK TRANSACTION;", NULL, NULL, &vars->database->error);
 
@@ -543,16 +542,16 @@ static int sqlite_callback(void *void_result, int num_results, char **column_val
         int num_records = 0;
 
         for(int i = 0; i < num_results; i++) {
-            if(column_names[i]) {
-                if(column_values[i]) {
-                    shput(line, column_names[i], strdup(column_values[i]));
-                }
+            if(column_names[i] && column_values[i]) {
+                shput(line, column_names[i], strdup(column_values[i]));
                 num_records++;
             }
         }
 
-        arrput(result->result_array, line);
-        result->num_records += 1;
+        if(num_records) {
+            arrput(result->result_array, line);
+	        result->num_records += 1;
+		}
     }
 
     return 0;
@@ -646,7 +645,7 @@ TMPL_varlist *cwf_db_records_to_loop(TMPL_varlist *varlist, cwf_query_result *da
             char char_loop_value[11];
 
             sprintf(char_loop_value, "%d", i);
-
+            
             loop_varlist = TMPL_add_var(loop_varlist, name, value, "loop_counter", char_loop_value, 0);
 
             if(i == data->num_records - 1) {
@@ -711,7 +710,7 @@ sds cwf_db_records_to_simple_json(cwf_query_result *data) {
             sds value = NULL;
 
             if(data->result_array[i][j].value) {
-     			value = cwf_escape_json(data->result_array[i][j].value);
+                value = cwf_escape_json(data->result_array[i][j].value);
             }
 
             if(j == num_cols - 1) {
