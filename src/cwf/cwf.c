@@ -152,6 +152,7 @@ void free_endpoint_config_hash(endpoint_config_item *hash) {
 }
 
 static inline endpoint_config *probe_for_config(endpoint_config_item *endpoints_cfg, const char *uri, char **config_url) {
+
     if(strlen(uri) == 1) {
         return shget(endpoints_cfg, "/");
     } else {
@@ -163,9 +164,9 @@ static inline endpoint_config *probe_for_config(endpoint_config_item *endpoints_
             int q_index = (int)(question_mark - uri);
             endpoint_name = strndup(uri, q_index);
 
-            if(!*endpoint_name) {
+            if(!*endpoint_name || (strlen(endpoint_name) == 1 && *endpoint_name == '/') ) {
                 free(endpoint_name);
-                endpoint_name = strdup("/");
+                return shget(endpoints_cfg, "/");
             }
         } else {
             endpoint_name = strdup(uri);
@@ -440,7 +441,7 @@ sds cwf_render_template(TMPL_varlist *varlist, const char *template_file, cwf_va
     sds template_path = sdsnew(cwf_vars->templates_path);
     template_path = sdscat(template_path, template_file);
 
-    int ret = TMPL_write(template_path, 0, fmtlist, varlist, &template_str, NULL, stderr) != 0;
+    int ret = TMPL_write(template_path, 0, fmtlist, varlist, &template_str, NULL, stderr) == 0;
 
     TMPL_free_fmtlist(fmtlist);
     TMPL_free_varlist(varlist);

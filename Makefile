@@ -2,8 +2,8 @@
 
 all: release
 
-debug: debug_set server cwf provas precos
-release: release_set server cwf provas precos
+debug: debug_set server cwf todo_list
+release: release_set server cwf  todo_list
 
 OPT_RELEASE=-O3
 
@@ -19,15 +19,10 @@ debug_set:
 server: src/dev_server/ssl_helper.c src/dev_server/server.c src/3dparty/sds/sds.c src/dev_server/ssl_helper.h  src/3dparty/sds/sds.h
 	gcc ${OPT_FLAGS2} src/dev_server/ssl_helper.c src/dev_server/server.c src/3dparty/sds/sds.c -o bin/server -lssl -lcrypto
 
-provas: cwf server provas/src/endpoints.c provas/src/exam_helpers.c provas/src/exam_helpers.h provas/src/helpers.h
-	gcc ${OPT_FLAGS2} provas/src/endpoints.c provas/src/exam_helpers.c -fPIC -shared -o provas/lib/libendpoints.so -L./src  -lcwf -lssl -lcrypto -lm
-	gcc ${OPT_FLAGS2} ${ENABLE_BACKTRACE} src/main.c src/libcwf.a -o provas.cgi -ldl -lpthread -lssl -lcrypto -lm
-	mv provas.cgi provas/cgi-bin/cwf.cgi
-
-precos: cwf server precos/src/endpoints.c precos/src/database_utils.h
-	gcc ${OPT_FLAGS2} precos/src/endpoints.c precos/src/database_utils.c -fPIC -shared -o precos/lib/libendpoints.so -L./src  -lcwf -lssl -lcrypto -lm
-	gcc ${OPT_FLAGS2} ${ENABLE_BACKTRACE} src/main.c src/libcwf.a -o precos.cgi -ldl -lpthread -lssl -lcrypto -lm
-	mv precos.cgi precos/cgi-bin/cwf.cgi
+todo_list: cwf server todo_list/src/endpoints.c
+	gcc ${OPT_FLAGS2} todo_list/src/endpoints.c -fPIC -shared -o todo_list/lib/libendpoints.so -L./src  -lcwf -lssl -lcrypto -lm
+	gcc ${OPT_FLAGS2} ${ENABLE_BACKTRACE} src/main.c src/libcwf.a -o todo_list.cgi -ldl -lpthread -lssl -lcrypto -lm
+	mv todo_list.cgi todo_list/cgi-bin/cwf.cgi
 
 cwf:
 	cd src/ && $(MAKE) EXTRA_C_FLAGS=${OPT_FLAGS} && cd -

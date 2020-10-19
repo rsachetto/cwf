@@ -91,13 +91,8 @@ ENDPOINT(todo) {
 
     varlist = TMPL_add_var(varlist, "username", SESSION_GET("username"), 0);
 
-    sds template_path = sdsnew(cwf_vars->templates_path);
-    template_path = sdscat(template_path, "todo.tmpl");
-
     // The varlist is freed in the render_template function
-    sds response = render_template(varlist, template_path);
-
-    sdsfree(template_path);
+    sds response = render_template(varlist, "todo.tmpl");
 
     close_database();
 
@@ -129,10 +124,8 @@ ENDPOINT(login) {
         TMPL_varlist *varlist = 0;
         request_to_varlist(varlist, NULL);
 
-        sds template_path = sdsnew(cwf_vars->templates_path);
-        template_path = sdscat(template_path, "index.tmpl");
-        response = render_template(varlist, template_path);
-        sdsfree(template_path);
+        response = render_template(varlist, "index.tmpl");
+
         return response;
     }
 }

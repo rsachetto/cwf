@@ -151,24 +151,28 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
 
         sql = sdscatfmt(sdsempty(), "CREATE TABLE IF NOT EXISTS session_data_%s (key TEXT PRIMARY KEY, value TEXT);", sid);
         rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
-        sdsfree(sql);
 
         if(rc != SQLITE_OK) {
             sqlite3_close(session_file);
-            fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - %s\n", __FILE__, __LINE__, error);
+            fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - %s - query %s\n", __FILE__, __LINE__, error, sql);
             sqlite3_free(error);
+            sdsfree(sql);
+            return;
         }
+        sdsfree(sql);
 
         sql = sdscatfmt(sdsempty(), "SELECT key, value FROM session_data_%s;", sid);
         rc = execute_query_for_session(sql, session_file, &(*session)->data, &error);
-        sdsfree(sql);
 
         if(rc != SQLITE_OK) {
-            fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - %s\n", __FILE__, __LINE__, error);
+            fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - %s-  query %s\n", __FILE__, __LINE__, error, sql);
             sqlite3_close(session_file);
             sqlite3_free(error);
+            sdsfree(sql);
             return;
         }
+
+        sdsfree(sql);
 
         sqlite3_close(session_file);
     } else {
@@ -187,7 +191,9 @@ void cwf_session_destroy(cwf_session **session, http_header *headers) {
         int rc = sqlite3_open_v2((*session)->session_filename, &session_file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, NULL);
 
         if(rc != SQLITE_OK) {
-            fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - Error opening %s\n", __FILE__, __LINE__, (*session)->session_filename);
+            error = (char *)sqlite3_errmsg(session_file);
+            fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - %s\n", __FILE__, __LINE__, error);
+            sqlite3_close(session_file);
             return;
         }
 
