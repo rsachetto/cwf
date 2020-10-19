@@ -58,7 +58,7 @@ static void dump_backtrace() {
             status = WEXITSTATUS(status);
         }
 
-        if(status == 0 && strcmp(funcname, "??") != 0 && strcmp(fileline, "??:?")) {
+        if(status == 0 && strcmp(funcname, "??") != 0 && strcmp(fileline, "??:?") != 0) {
             symname = funcname;
         } else {
             sprintf(fileline, "in %s", mdlinfo.dli_fname);
@@ -90,7 +90,6 @@ static void signal_segv(int signum, siginfo_t *info, void *ptr) {
 
     fprintf(stderr, "\033[1;31m");
 
-    static const char *si_codes[3] = {"", "SEGV_MAPERR", "SEGV_ACCERR"};
     static const char *si_message[3] = {"", "Address not mapped", "Invalid permissions"};
     fprintf(stderr, "Segmentation Fault!\n\n");
 
@@ -104,10 +103,6 @@ static void signal_segv(int signum, siginfo_t *info, void *ptr) {
         perror(msg);
     else
         fprintf(stderr, "%s\n\n\n", msg);
-    //_exit (-1);
-    //   avoid unused warning
-    signum = 0;
-    ptr = NULL;
 
     fprintf(stderr, "\033[0m");
 }

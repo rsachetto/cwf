@@ -176,7 +176,7 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
     }
 }
 
-void cwf_session_destroy(cwf_session **session, http_header *headers, char *session_files_path) {
+void cwf_session_destroy(cwf_session **session, http_header *headers) {
 
     if(*session == NULL) {
         return;
@@ -185,6 +185,11 @@ void cwf_session_destroy(cwf_session **session, http_header *headers, char *sess
         char *error;
         sqlite3 *session_file;
         int rc = sqlite3_open_v2((*session)->session_filename, &session_file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, NULL);
+
+        if(rc != SQLITE_OK) {
+            fprintf(stderr, "[SQLITE-ERROR] File %s - Line %d - Error opening %s\n", __FILE__, __LINE__, (*session)->session_filename);
+            return;
+        }
 
         (*session)->cookie->expires = -3600 * 24;
         add_cookie_to_header((*session)->cookie, headers);

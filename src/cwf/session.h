@@ -14,16 +14,10 @@ typedef struct cwf_session_t {
 } cwf_session;
 
 void cwf_session_start(cwf_session **session, http_header *headers, char *session_files_path, int expires);
-
-#define session_destroy() cwf_session_destroy(&(cwf_vars->session), &(cwf_vars->headers), cwf_vars->session_files_path)
-void cwf_session_destroy(cwf_session **session, http_header *headers, char *session_files_path);
-
+void cwf_session_destroy(cwf_session **session, http_header *headers);
 void cwf_save_session(cwf_session *session);
-
 char *cwf_session_get(cwf_session *session, const char *key);
-
 void cwf_session_put(cwf_session *session, const char *key, const char *value);
-
 char *SHA256_from_char_input(char *input);
 
 #endif /* __SESSION_H */

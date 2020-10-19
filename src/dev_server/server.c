@@ -30,15 +30,15 @@ static const char *get_filename_ext(const char *filename) {
     return dot + 1;
 }
 
-static void load_mime_types(struct mime_type **mime_types) {
+static void load_mime_types(struct mime_type **mime_types_hash) {
     int ext_number;
-    shdefault(*mime_types, NULL);
-    sh_new_arena(*mime_types);
+    shdefault(*mime_types_hash, NULL);
+    sh_new_arena(*mime_types_hash);
 
     for(int i = 0; i < NUM_MIME_TYPES; i++) {
         sds *extensions = sdssplitlen(mime_types_raw[i][1], sizeof(mime_types_raw[i][1]), " ", 1, &ext_number);
         for(int j = 0; j < ext_number; j++) {
-            shput(*mime_types, extensions[j], mime_types_raw[i][0]);
+            shput(*mime_types_hash, extensions[j], mime_types_raw[i][0]);
         }
         sdsfreesplitres(extensions, ext_number);
     }
@@ -486,6 +486,7 @@ void respond(int client_socket, bool https, bool verbose) {
 
                         struct static_file cached_file = shget(cache, path);
 
+                        //TODO: implement a cache substituion policy. We dont need this now, as we are only using the server for development
                         if(cached_file.data == NULL) {
                             if((fd = open(path, O_RDONLY)) != -1) {
                                 stat(path, &st);
@@ -496,7 +497,6 @@ void respond(int client_socket, bool https, bool verbose) {
                                 to_page_size += pagesize - (to_page_size % pagesize);
 
                                 cached_file.data = (char *)mmap(0, to_page_size, PROT_READ, MAP_PRIVATE, fd, 0);
-								
                                 cached_file.st = st;
                                 shput(cache, path, cached_file);
                                 close(fd);
@@ -504,7 +504,6 @@ void respond(int client_socket, bool https, bool verbose) {
                         }
 
                         if(cached_file.data) {
-
                             send_header(socket_pointer, HEADER_OK, false, https);
                             response_header_returned = HEADER_OK;
 
@@ -583,6 +582,7 @@ void respond(int client_socket, bool https, bool verbose) {
     secs_used = (end.tv_sec - start.tv_sec); // avoid overflow by subtracting first
     micros_used = ((secs_used * 1000000) + end.tv_usec) - (start.tv_usec);
     if(!error) {
+        //We want to compare the pointers here, not the strings
         if(response_header_returned == HEADER_BAD_REQUEST || response_header_returned == HEADER_NOT_FOUND) {
             fprintf(stderr, "\033[1;31m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned + 9,
                     micros_used / 1000);

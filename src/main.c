@@ -5,7 +5,6 @@
 #include <dlfcn.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "cwf/cwf.h"
 #include "ini_parse/ini_parse.h"
@@ -120,15 +119,18 @@ int main(int argc, char **argv) {
     if(response) {
         fprintf(stdout, "%s", response);
         fflush(stdout);
-        sdsfree(response);
+        //TODO: this would be needed only for fastCGI
+        //sdsfree(response);
     }
 
     cwf_save_session(cwf_vars->session);
-    sdsfree(site_config_file);
-    free_cwf_vars(cwf_vars);
 
-    if(endpoint_configs)
-        free_endpoint_config_hash(endpoint_configs);
+    //TODO: this would be needed only for fastCGI
+//    sdsfree(site_config_file);
+//    free_cwf_vars(cwf_vars);
+//
+//    if(endpoint_configs)
+//        free_endpoint_config_hash(endpoint_configs);
 
     // TODO: maybe we will also need to release the file locks if the section is not readonly
     return 0;

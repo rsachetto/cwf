@@ -55,10 +55,6 @@ void add_cookie_to_header(cwf_cookie *c, http_header *header) {
     if(!c || !c->name || !c->value)
         return;
 
-    size_t cookie_str_size = strlen(c->name);
-    cookie_str_size += strlen(c->value);
-    cookie_str_size += 2; // = and ;
-
     sds cookie_str = sdsnew(c->name);
 
     cookie_str = sdscatfmt(cookie_str, "=%s;", c->value);

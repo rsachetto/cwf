@@ -447,7 +447,10 @@ sds cwf_render_template(TMPL_varlist *varlist, const char *template_file, cwf_va
 
     sdsfree(template_path);
 
-    return template_str;
+    if(ret)
+        return template_str;
+    else
+        return NULL;
 }
 
 void cwf_open_database(cwf_vars *vars) {
@@ -475,7 +478,6 @@ void cwf_open_database(cwf_vars *vars) {
 error:
     sqlite3_close(vars->database->db);
     vars->database->opened = false;
-    return;
 }
 
 void cwf_begin_transaction(cwf_vars *vars) {
@@ -490,8 +492,6 @@ void cwf_begin_transaction(cwf_vars *vars) {
     if(rc != SQLITE_OK) {
         vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
     }
-
-    return;
 }
 
 void cwf_commit_transaction(cwf_vars *vars) {
@@ -506,8 +506,6 @@ void cwf_commit_transaction(cwf_vars *vars) {
     if(rc != SQLITE_OK) {
         vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
     }
-
-    return;
 }
 
 void cwf_rollback_transaction(cwf_vars *vars) {
@@ -522,8 +520,6 @@ void cwf_rollback_transaction(cwf_vars *vars) {
     if(rc != SQLITE_OK) {
         vars->database->error = strdup(sqlite3_errmsg(vars->database->db));
     }
-
-    return;
 }
 
 void cwf_close_database(cwf_vars *vars) {
@@ -697,9 +693,9 @@ sds cwf_db_records_to_simple_json(cwf_query_result *data) {
 
     sds json = sdsnew("[");
 
-    int num_records = data->num_records;
+    unsigned int num_records = data->num_records;
 
-    for(int i = 0; i < num_records; i++) {
+    for(unsigned int i = 0; i < num_records; i++) {
 
         json = sdscatfmt(json, "%s", "{");
 
