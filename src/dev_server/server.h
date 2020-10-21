@@ -25,9 +25,20 @@
 
 #define MAX_BUFFER_SIZE 1024
 
+#define MAX_EVENTS 1024  /* Maximum number of events to process*/
+#define LEN_NAME 1024  /* Assuming that the length of the filename won't exceed 1024 bytes*/
+#define EVENT_SIZE  ( sizeof (struct inotify_event) ) /*size of one event*/
+#define BUF_LEN     ( MAX_EVENTS * ( EVENT_SIZE + LEN_NAME )) /*buffer to store the data of events*/
+
 struct static_file {
+    size_t real_size;
     struct stat st;
     char *data;
+};
+
+struct watch_entry {
+    int key;
+    char *value;
 };
 
 struct cache_entry {
@@ -36,6 +47,7 @@ struct cache_entry {
 };
 
 typedef struct cache_entry * file_cache;
+typedef struct watch_entry * notify_entries_t;
 
 struct mime_type {
     char *key;   // file extension

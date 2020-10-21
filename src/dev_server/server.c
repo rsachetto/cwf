@@ -9,6 +9,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include<sys/inotify.h>
+#include <dirent.h>
 
 #include "server.h"
 
@@ -18,9 +20,12 @@ sds cert_file, key_file;
 int listener;
 struct mime_type *mime_types;
 static char *response_header_returned = NULL;
-struct static_file file_not_in_cache = (struct static_file){{0}, 0};
+struct static_file file_not_in_cache = (struct static_file){-1, {0}, 0};
 
 file_cache cache = NULL;
+notify_entries_t notify_entries = NULL;
+
+pthread_mutex_t lock;
 
 static const char *get_filename_ext(const char *filename) {
     const char *dot = strrchr(filename, '.'); // Return the last ocurrency of the .
@@ -122,11 +127,13 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
 // Macros for reading and writing in the child pipe
 #define PARENT_READ readpipe[0]
 #define CHILD_WRITE readpipe[1]
+
 #define CHILD_READ writepipe[0]
 #define PARENT_WRITE writepipe[1]
 
     int writepipe[2] = {-1, -1}, /* parent -> child */
         readpipe[2] = {-1, -1};  /* child -> parent */
+
     pid_t childpid;
 
     if(pipe(readpipe) < 0 || pipe(writepipe) < 0) {
@@ -484,6 +491,7 @@ void respond(int client_socket, bool https, bool verbose) {
                     if((strncmp(uri, "/static/", 8) == 0) || (strncmp(uri, "/media/", 7) == 0) || (strncmp(uri, "/favicon.ico", 11) == 0)) {
                         path = sdscat(path, uri);
 
+                        pthread_mutex_lock(&lock);
                         struct static_file cached_file = shget(cache, path);
 
                         //TODO: implement a cache substituion policy. We dont need this now, as we are only using the server for development
@@ -498,6 +506,7 @@ void respond(int client_socket, bool https, bool verbose) {
 
                                 cached_file.data = (char *)mmap(0, to_page_size, PROT_READ, MAP_PRIVATE, fd, 0);
                                 cached_file.st = st;
+                                cached_file.real_size = to_page_size;
                                 shput(cache, path, cached_file);
                                 close(fd);
                             }
@@ -529,6 +538,8 @@ void respond(int client_socket, bool https, bool verbose) {
                             send_header(socket_pointer, HEADER_NOT_FOUND, true, https);
                             response_header_returned = HEADER_NOT_FOUND;
                         }
+                        pthread_mutex_unlock(&lock);
+
                     } else {
                         execute_cgi(socket_pointer, request_lines, NULL, lines_count, https, verbose);
                     }
@@ -596,6 +607,153 @@ void respond(int client_socket, bool https, bool verbose) {
     }
 }
 
+int add_dir_watch(int fd, char *path) {
+    return inotify_add_watch(fd, path, IN_MODIFY | IN_DELETE | IN_CREATE | IN_DELETE_SELF);
+}
+
+
+static void add_all_watches(const char *name, int indent, int fd, bool verbose) {
+
+    DIR *dir;
+    struct dirent *entry;
+
+    if (!(dir = opendir(name)))
+        return;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_DIR) {
+            char path[1024];
+
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || strcmp(entry->d_name, ".git") == 0 || strcmp(entry->d_name, ".idea") == 0)
+                continue;
+
+            snprintf(path, sizeof(path), "%s/%s", name, entry->d_name);
+
+            int wd = add_dir_watch(fd, path);
+
+            if(wd != -1) {
+                hmput(notify_entries, wd, strdup(path));
+            }
+
+            if(verbose) {
+                if(wd == -1) {
+                    printf("Could not watch : %s\n", path);
+                } else {
+                    printf("Watching : %s\n", path);
+                }
+            }
+
+            add_all_watches(path, indent + 2, fd, verbose);
+        }
+    }
+    closedir(dir);
+}
+
+static void *check_for_cached_file_changes(void *args) {
+
+    pthread_detach(pthread_self());
+
+    int fd_notify = *(int*)(args);
+
+    while(1) {
+
+        int i=0, length;
+        char buffer[BUF_LEN];
+
+        length = read(fd_notify, buffer, BUF_LEN);
+
+        while(i < length) {
+
+            struct inotify_event *event = (struct inotify_event *) &buffer[i];
+
+            if(event->len) {
+
+             if ( event->mask & IN_DELETE ) {
+                    if ( event->mask & IN_ISDIR ) {
+                    }
+                    else {
+                        pthread_mutex_lock(&lock);
+                        sds path = sdscatfmt(sdsempty(),"%s/%s", hmget(notify_entries, event->wd), event->name);
+                        struct static_file cached_file = shget(cache, path);
+
+                        //file was cached and deleted. We need to remove it from cache
+                        if(cached_file.data != NULL) {
+                            printf("%s was cached and deleted, removing it from cache\n", path);
+                            munmap(cached_file.data, cached_file.real_size);
+                            cached_file.data = NULL;
+                            cached_file.st = (struct stat){0};
+                            cached_file.real_size = -1;
+                            shput(cache, path, cached_file);
+                        }
+
+                        pthread_mutex_unlock(&lock);
+
+                        sdsfree(path);
+
+                    }
+                }
+                else if ( event->mask & IN_CREATE ) {
+
+                    if(event->mask & IN_ISDIR) {
+                        sds path = sdscatfmt(sdsempty(), "%s/%s", hmget(notify_entries, event->wd), event->name);
+                        pthread_mutex_lock(&lock);
+
+                        int wd = add_dir_watch(fd_notify, path);
+
+                        if(wd != -1) {
+                            printf("The directory %s was created.\n", path);
+                            hmput(notify_entries, wd, strdup(path));
+                        }
+                        pthread_mutex_unlock(&lock);
+                    }
+                }
+                else if ( event->mask & IN_MODIFY ) {
+
+                    if ( event->mask & IN_ISDIR ) {
+                    }
+                    else {
+                        sds path = sdscatfmt(sdsempty(),"%s/%s", hmget(notify_entries, event->wd), event->name);
+
+                        pthread_mutex_lock(&lock);
+
+                        struct static_file cached_file = shget(cache, path);
+
+                        //file was cached and changed. We need to reload it
+                        if(cached_file.data != NULL) {
+
+                            printf("%s was cached and modified, reloading it\n", path);
+                            struct stat st;
+
+                            munmap(cached_file.data, cached_file.real_size);
+
+                            int fd_file = open(path, O_RDONLY);
+
+                            stat(path, &st);
+
+                            size_t to_page_size = st.st_size;
+
+                            int pagesize = getpagesize();
+                            to_page_size += pagesize - (to_page_size % pagesize);
+
+                            cached_file.data = (char *)mmap(0, to_page_size, PROT_READ, MAP_PRIVATE, fd_file, 0);
+                            cached_file.st = st;
+                            cached_file.real_size = to_page_size;
+
+                            shput(cache, path, cached_file);
+                            close(fd_file);
+                        }
+                        pthread_mutex_unlock(&lock);
+
+                        sdsfree(path);
+                    }
+
+                }
+            }
+            i += EVENT_SIZE + event->len;
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
 
     struct sockaddr_in clientaddr;
@@ -616,6 +774,8 @@ int main(int argc, char *argv[]) {
 
     shdefault(cache, file_not_in_cache);
     sh_new_strdup(cache);
+
+    hmdefault(notify_entries, NULL);
 
     int port = 8080;
 
@@ -667,6 +827,23 @@ int main(int argc, char *argv[]) {
     }
 
     load_mime_types(&mime_types);
+
+    int fd = inotify_init();
+
+    if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
+        exit(EXIT_FAILURE);
+
+    add_all_watches(ROOT, 0, fd, verbose);
+
+    pthread_t inotify_thread;
+
+    if (pthread_mutex_init(&lock, NULL) != 0) {
+        printf("\n mutex init has failed\n");
+        return EXIT_FAILURE;
+    }
+
+    pthread_create(&inotify_thread, NULL, check_for_cached_file_changes, (void*)&fd);
+
     start_server(port);
 
     if(https) {
@@ -710,6 +887,9 @@ int main(int argc, char *argv[]) {
             }
         }
     }
+
+    //inotify_rm_watch( fd, wd );
+    close( fd );
 
     return 0;
 }
