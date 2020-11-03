@@ -4,12 +4,12 @@
 - TODO: add a sql function with prepared statements. https://stackoverflow.com/questions/9804371/syntax-and-sample-usage-of-generic-in-c11 and https://www.tutorialspoint.com/cprogramming/c_variable_arguments.htm
 - TODO: test internationalization features - https://kirste.userpage.fu-berlin.de/chemnet/use/info/libc/libc_19.html - Maybe use gettext - https://man7.org/linux/man-pages/man3/gettext.3.html
 - TODO: make a [dev_server] session on the site.ini to configure the dev server. Set root, http, https keys, etc...
-- TODO: maek all macros UPPER CASE
 - Add a varlist in the cwf_vars and maybe add the post and get to it
+- Improve password hashing features: https://monocypher.org/manual/argon2i
 
-// TODO: use this to format time----
-// const char *time_details = "16:35:12";
-// struct tm tm;
-// strptime(time_details, "%H:%M:%S", &tm);
-// time_t t = mktime(&tm);  // t is now your desired time_t
+- use this to format time
+	const char *time_details = "16:35:12";
+	struct tm tm;
+	strptime(time_details, "%H:%M:%S", &tm);
+	time_t t = mktime(&tm); 
 
