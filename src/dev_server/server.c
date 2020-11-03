@@ -262,10 +262,8 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
             }
         }
 
-        bool header_error = false;
         sds status_msg = sdsnew(HEADER_OK);
         response_header_returned = HEADER_OK;
-        int status_index = -1;
 
         sds response_headers = NULL;
 
@@ -273,6 +271,10 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
             response_header_returned = HEADER_INTERNAL_SERVER_ERROR;
             send_header(socket, HEADER_INTERNAL_SERVER_ERROR, true, https);
         } else {
+
+        	bool header_error = false;
+        	int status_index = -1;
+
             int lines_count;
             sds *response_lines = sdssplitlen(response_from_child, sdslen(response_from_child), "\r\n", strlen("\r\n"), &lines_count);
             // The last 2 lines are empty strings
@@ -398,8 +400,7 @@ void respond(int client_socket, bool https, bool verbose) {
 
     sds request = sdsempty();
 
-    char data_to_send[MAX_BUFFER_SIZE];
-    int rcvd, fd, bytes_read;
+    int rcvd, fd;
 
     sds *request_lines;
     sds *method_uri_version;
@@ -517,9 +518,9 @@ void respond(int client_socket, bool https, bool verbose) {
                             response_header_returned = HEADER_OK;
 
                             sds content_length_header = sdscatprintf(sdsempty(), "Content-Length: %ld", cached_file.st.st_size);
-                            sds content_type_header = sdsempty();
                             char *mime_type = shget(mime_types, get_filename_ext(path));
 
+                            sds content_type_header;
                             if(mime_type) {
                                 content_type_header = sdscatfmt(sdsempty(), "Content-Type: %s", mime_type);
                             } else {
@@ -828,10 +829,11 @@ int main(int argc, char *argv[]) {
 
     load_mime_types(&mime_types);
 
+	
     int fd = inotify_init();
 
-    if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
-        exit(EXIT_FAILURE);
+//    if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
+//        exit(EXIT_FAILURE);
 
     add_all_watches(ROOT, 0, fd, verbose);
 
@@ -889,7 +891,7 @@ int main(int argc, char *argv[]) {
     }
 
     //inotify_rm_watch( fd, wd );
-    close( fd );
+    //close( fd );
 
     return 0;
 }

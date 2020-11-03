@@ -1619,15 +1619,15 @@ void stbds_strreset(stbds_string_arena *a)
 typedef struct { int key,b,c,d; } stbds_struct;
 typedef struct { int key[2],b,c,d; } stbds_struct2;
 
-static char buffer[256];
+static char _buffer[256];
 char *strkey(int n)
 {
 #if defined(_WIN32) && defined(__STDC_WANT_SECURE_LIB__)
-   sprintf_s(buffer, sizeof(buffer), "test_%d", n);
+   sprintf_s(_buffer, sizeof(_buffer), "test_%d", n);
 #else
-   sprintf(buffer, "test_%d", n);
+   sprintf(_buffer, "test_%d", n);
 #endif
-   return buffer;
+   return _buffer;
 }
 
 void stbds_unit_tests(void)
