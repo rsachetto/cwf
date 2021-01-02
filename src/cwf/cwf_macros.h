@@ -77,11 +77,20 @@
 
 #define execute_query(result, query)                                                                                                                           \
     do {                                                                                                                                                       \
-        (result) = cwf_execute_query((query), cwf_vars->database);                                                                                             \
+        (result) = cwf_execute_query((query), cwf_vars->database, NULL);                                                                                       \
         if(cwf_vars->database->error) {                                                                                                                        \
             LOG_ERROR("Error while executing query %s in %s - %d: %s\n", query, __FILE__, __LINE__, cwf_vars->database->error);                                \
         }                                                                                                                                                      \
     } while(0)
+
+#define execute_query_with_callback(result, query, callback)                                                                                                   \
+    do {                                                                                                                                                       \
+        (result) = cwf_execute_query((query), cwf_vars->database, callback);                                                                                   \
+        if(cwf_vars->database->error) {                                                                                                                        \
+            LOG_ERROR("Error while executing query %s in %s - %d: %s\n", query, __FILE__, __LINE__, cwf_vars->database->error);                                \
+        }                                                                                                                                                      \
+    } while(0)
+
 
 #define execute_query_or_return_404(result, query)                                                                                                             \
     do {                                                                                                                                                       \

@@ -228,7 +228,13 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
 
         if(request_content) {
             // Writing to the child pipe
-            write(PARENT_WRITE, request_content, sdslen(request_content));
+
+			size_t request_content_len = sdslen(request_content);
+            ssize_t bytes  = write(PARENT_WRITE, request_content, request_content_len);
+
+			if(bytes != request_content_len) {
+				fprintf(stderr, "Error writing data to cliente. Written %zu, expected %zu\n", bytes, request_content_len);
+			}
         }
 
         char buffer[2] = {0};
@@ -299,7 +305,11 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
 
                     if(strncmp(key_value[1], "200", 3) == 0) {
                         response_header_returned = HEADER_OK;
-                    } else if(strncmp(key_value[1], "404", 3) == 0) {
+                    } 
+					else if(strncmp(key_value[1], "401", 3) == 0) {
+                        response_header_returned = HEADER_UNAUTHORIZED;
+                    }
+					else if(strncmp(key_value[1], "404", 3) == 0) {
                         response_header_returned = HEADER_NOT_FOUND;
                     } else if(strncmp(key_value[1], "400", 3) == 0) {
                         response_header_returned = HEADER_BAD_REQUEST;

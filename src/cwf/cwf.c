@@ -527,7 +527,7 @@ void cwf_close_database(cwf_vars *vars) {
     sqlite3_close(vars->database->db);
 }
 
-static int sqlite_callback(void *void_result, int num_results, char **column_values, char **column_names) {
+static int default_sqlite_callback(void *void_result, int num_results, char **column_values, char **column_names) {
 
     if(num_results) {
         cwf_query_result *result = (cwf_query_result *)void_result;
@@ -539,6 +539,7 @@ static int sqlite_callback(void *void_result, int num_results, char **column_val
         int num_records = 0;
 
         for(int i = 0; i < num_results; i++) {
+			//TODO: should we add NULL if the value returned from sqlite is empty???
             if(column_names[i] && column_values[i]) {
                 shput(line, column_names[i], strdup(column_values[i]));
                 num_records++;
@@ -554,18 +555,26 @@ static int sqlite_callback(void *void_result, int num_results, char **column_val
     return 0;
 }
 
-cwf_query_result *cwf_execute_query(const char *query, cwf_database *database) {
+cwf_query_result *cwf_execute_query(const char *query, cwf_database *database, int (*callback)(void*,int,char**,char**)) {
 
     cwf_query_result *result = calloc(1, sizeof(struct cwf_query_result_t));
 
     if(!database->opened) {
-        database->error = strdup("Database is not opened. Call open_database first!\n");
+        database->error = strdup("Database is closed. Call open_database first!\n");
         return NULL;
     }
 
     char *errmsg;
 
-    int rc = sqlite3_exec(database->db, query, sqlite_callback, (void *)result, &errmsg);
+
+	int rc;
+
+	if(!callback) {
+	    rc = sqlite3_exec(database->db, query, default_sqlite_callback, (void *)result, &errmsg);
+	}
+	else {
+	    rc = sqlite3_exec(database->db, query, callback, (void *)result, &errmsg);
+	}
 
     if(rc != SQLITE_OK) {
         database->error = strdup(errmsg);

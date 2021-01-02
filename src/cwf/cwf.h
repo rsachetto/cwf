@@ -133,7 +133,7 @@ void cwf_rollback_transaction(cwf_vars *vars) ;
 
 void cwf_close_database(cwf_vars *vars);
 
-cwf_query_result *cwf_execute_query(const char *query, cwf_database *db);
+cwf_query_result *cwf_execute_query(const char *query, cwf_database *db, int (*callback)(void*,int,char**,char**));
 
 int get_num_columns(string_hash r);
 
