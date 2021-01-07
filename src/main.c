@@ -111,8 +111,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    if(endpoint_function && !error_found)
+    if(endpoint_function && !error_found) {
         response = endpoint_function(cwf_vars, NULL);
+    }
 
     write_http_headers(cwf_vars->headers);
 

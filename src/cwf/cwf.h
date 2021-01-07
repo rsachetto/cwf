@@ -48,9 +48,9 @@ typedef struct cwf_query_result_t {
 } cwf_query_result;
 
 typedef struct cwf_database_t {
-    char *error;
     sqlite3 *db;
     bool opened;
+    char *error;
 } cwf_database;
 
 typedef struct request_item_t {

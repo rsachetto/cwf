@@ -390,7 +390,7 @@ cwf_request *new_from_env_vars() {
                   (len = (int)strtol(env, NULL, 10)) > 0) {
             req->data_type = "json";
         } else { // multipart
-            // TODO handle multpart input (get from liccgi)
+            // TODO handle multpart input (get from libcgi)
         }
 
         get_post(req, len, req->data_type);
@@ -484,7 +484,7 @@ error:
 void cwf_begin_transaction(cwf_vars *vars) {
 
     if(!vars->database->opened) {
-        vars->database->error = strdup("Database not opened. Call open_database first!\n");
+        vars->database->error = strdup("Database is closed. Call open_database first!\n");
         return;
     }
 
@@ -498,7 +498,7 @@ void cwf_begin_transaction(cwf_vars *vars) {
 void cwf_commit_transaction(cwf_vars *vars) {
 
     if(!vars->database->opened) {
-        vars->database->error = strdup("Database not opened. Call open_database first!\n");
+        vars->database->error = strdup("Database is closed. Call open_database first!\n");
         return;
     }
 
@@ -512,7 +512,7 @@ void cwf_commit_transaction(cwf_vars *vars) {
 void cwf_rollback_transaction(cwf_vars *vars) {
 
     if(!vars->database->opened) {
-        vars->database->error = strdup("Database not opened. Call open_database first!\n");
+        vars->database->error = strdup("Database is closed. Call open_database first!\n");
         return;
     }
 

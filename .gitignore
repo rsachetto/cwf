@@ -66,3 +66,6 @@ todo_list/key.pem
 CWF_logos/
 todo_list/sessions/sessions.sqlite
 precos
+GPATH
+GRTAGS
+GTAGS

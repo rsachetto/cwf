@@ -116,7 +116,7 @@ static void start_server(int port) {
     }
 
     /* listen */
-    if(listen(listener, 10) == -1) {
+    if(listen(listener, 4096) == -1) {
         perror("listen() error!");
         exit(1);
     }
@@ -244,6 +244,7 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
         bool headers_end_found = false;
 
         // here we read the headers
+		int len = 0;
         while(1) {
             ssize_t count = read(PARENT_READ, buffer, 1);
             if(count == -1) {
@@ -257,8 +258,8 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
                 break;
             } else {
                 response_from_child = sdscatlen(response_from_child, buffer, count);
-                int len = sdslen(response_from_child);
 
+				len++;
                 if(len >= 4) {
                     headers_end_found = (response_from_child[len - 4] == '\r' && response_from_child[len - 3] == '\n' && response_from_child[len - 2] == '\r' &&
                                          response_from_child[len - 1] == '\n');
@@ -461,9 +462,10 @@ void respond(int client_socket, bool https, bool verbose) {
     }
 
     // TODO: this is only the header. We need to read more after we get the content-length. This will be necessary when reading POST data;
+	int len = 0;
     while((rcvd = server_read(socket_pointer, mesg, 1, https)) > 0) {
         request = sdscatlen(request, mesg, rcvd);
-        int len = sdslen(request);
+		len += rcvd;
         if(len >= 4) {
             bool header_end = (request[len - 4] == '\r' && request[len - 3] == '\n' && request[len - 2] == '\r' && request[len - 1] == '\n');
             if(header_end)
@@ -838,12 +840,8 @@ int main(int argc, char *argv[]) {
     }
 
     load_mime_types(&mime_types);
-
 	
     int fd = inotify_init();
-
-//    if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
-//        exit(EXIT_FAILURE);
 
     add_all_watches(ROOT, 0, fd, verbose);
 
@@ -870,38 +868,11 @@ int main(int argc, char *argv[]) {
 
     addrlen = sizeof(clientaddr);
 
-    while(1) {
-
-        read_fds = master;
-
-        if(select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1) {
-            perror("select() error!");
-            exit(EXIT_FAILURE);
-        }
-
-        for(int i = 0; i <= fdmax; i++) {
-
-            if(FD_ISSET(i, &read_fds)) {
-                if(i == listener) {
-
-                    if((client_socket = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) == -1) {
-                        perror("accept() error!");
-                    } else {
-                        FD_SET(client_socket, &master);
-                        if(client_socket > fdmax) {
-                            fdmax = client_socket;
-                        }
-                    }
-                } else {
-                    respond(i, https, verbose);
-                    FD_CLR(i, &master);
-                }
-            }
-        }
-    }
-
-    //inotify_rm_watch( fd, wd );
-    //close( fd );
+	while(1) {
+		if((client_socket = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) != -1) {
+			respond(client_socket, https, verbose);
+		} 
+	}
 
     return 0;
 }
