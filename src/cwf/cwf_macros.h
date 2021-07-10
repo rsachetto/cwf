@@ -28,7 +28,7 @@
         return NULL;                                                                                                                                           \
     } while(0)
 
-#define generate_simple_404(format, ...) simple_404_page(cwf_vars, format, __VA_ARGS__)
+#define generate_simple_404(format, ...) simple_404_page(cwf_vars, format __VA_OPT__(,) __VA_ARGS__)
 
 #define SERVER(key) cwf_server_vars(cwf_vars->request, (key))
 

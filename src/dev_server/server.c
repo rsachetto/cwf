@@ -124,12 +124,12 @@ static void start_server(int port) {
 
 static void execute_cgi(void *socket, sds *request_headers, sds request_content, int num_headers, bool https, bool verbose) {
 
-// Macros for reading and writing in the child pipe
-#define PARENT_READ readpipe[0]
-#define CHILD_WRITE readpipe[1]
+    // Macros for reading and writing in the child pipe
+    #define PARENT_READ readpipe[0]
+    #define CHILD_WRITE readpipe[1]
 
-#define CHILD_READ writepipe[0]
-#define PARENT_WRITE writepipe[1]
+    #define CHILD_READ writepipe[0]
+    #define PARENT_WRITE writepipe[1]
 
     int writepipe[2] = {-1, -1}, /* parent -> child */
         readpipe[2] = {-1, -1};  /* child -> parent */
@@ -227,10 +227,8 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
         close(CHILD_WRITE);
 
         if(request_content) {
-            // Writing to the child pipe
-
 			size_t request_content_len = sdslen(request_content);
-            ssize_t bytes  = write(PARENT_WRITE, request_content, request_content_len);
+            ssize_t bytes = write(PARENT_WRITE, request_content, request_content_len);
 
 			if(bytes != request_content_len) {
 				fprintf(stderr, "Error writing data to cliente. Written %zu, expected %zu\n", bytes, request_content_len);
