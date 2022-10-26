@@ -304,11 +304,9 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
 
                     if(strncmp(key_value[1], "200", 3) == 0) {
                         response_header_returned = HEADER_OK;
-                    } 
-					else if(strncmp(key_value[1], "401", 3) == 0) {
+                    } else if(strncmp(key_value[1], "401", 3) == 0) {
                         response_header_returned = HEADER_UNAUTHORIZED;
-                    }
-					else if(strncmp(key_value[1], "404", 3) == 0) {
+                    } else if(strncmp(key_value[1], "404", 3) == 0) {
                         response_header_returned = HEADER_NOT_FOUND;
                     } else if(strncmp(key_value[1], "400", 3) == 0) {
                         response_header_returned = HEADER_BAD_REQUEST;
@@ -604,11 +602,10 @@ void respond(int client_socket, bool https, bool verbose) {
     secs_used = (end.tv_sec - start.tv_sec); // avoid overflow by subtracting first
     micros_used = ((secs_used * 1000000) + end.tv_usec) - (start.tv_usec);
     if(!error) {
-        //We want to compare the pointers here, not the strings
-        if(response_header_returned == HEADER_BAD_REQUEST || response_header_returned == HEADER_NOT_FOUND) {
+        if(strcmp(response_header_returned, HEADER_BAD_REQUEST) == 0 || strcmp(response_header_returned, HEADER_NOT_FOUND) == 0) {
             fprintf(stderr, "\033[1;31m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned + 9,
                     micros_used / 1000);
-        } else if(response_header_returned == HEADER_REDIRECT) {
+        } else if(strcmp(response_header_returned, HEADER_REDIRECT) == 0) {
             fprintf(stderr, "\033[1;33m%s %s - %s - took %ld ms\033[0m\n", method_uri_version[0], method_uri_version[1], response_header_returned + 9,
                     micros_used / 1000);
         } else {
@@ -621,7 +618,6 @@ void respond(int client_socket, bool https, bool verbose) {
 int add_dir_watch(int fd, char *path) {
     return inotify_add_watch(fd, path, IN_MODIFY | IN_DELETE | IN_CREATE | IN_DELETE_SELF);
 }
-
 
 static void add_all_watches(const char *name, int indent, int fd, bool verbose) {
 
@@ -702,8 +698,7 @@ static void *check_for_cached_file_changes(void *args) {
                         sdsfree(path);
 
                     }
-                }
-                else if ( event->mask & IN_CREATE ) {
+                } else if ( event->mask & IN_CREATE ) {
 
                     if(event->mask & IN_ISDIR) {
                         sds path = sdscatfmt(sdsempty(), "%s/%s", hmget(notify_entries, event->wd), event->name);
@@ -717,8 +712,7 @@ static void *check_for_cached_file_changes(void *args) {
                         }
                         pthread_mutex_unlock(&lock);
                     }
-                }
-                else if ( event->mask & IN_MODIFY ) {
+                } else if ( event->mask & IN_MODIFY ) {
 
                     if ( event->mask & IN_ISDIR ) {
                     }
@@ -771,12 +765,6 @@ int main(int argc, char *argv[]) {
     socklen_t addrlen;
     int client_socket;
     char c;
-
-    fd_set master;
-    fd_set read_fds;
-    int fdmax;
-    FD_ZERO(&master);
-    FD_ZERO(&read_fds);
 
     bool verbose = false;
     bool https = false;
@@ -838,7 +826,7 @@ int main(int argc, char *argv[]) {
     }
 
     load_mime_types(&mime_types);
-	
+
     int fd = inotify_init();
 
     add_all_watches(ROOT, 0, fd, verbose);
@@ -861,15 +849,12 @@ int main(int argc, char *argv[]) {
         printf("HTTP server started at %shttp://localhost:%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
     }
 
-    FD_SET(listener, &master);
-    fdmax = listener;
-
     addrlen = sizeof(clientaddr);
 
 	while(1) {
 		if((client_socket = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) != -1) {
 			respond(client_socket, https, verbose);
-		} 
+		}
 	}
 
     return 0;
