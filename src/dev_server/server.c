@@ -227,12 +227,12 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
         close(CHILD_WRITE);
 
         if(request_content) {
-			size_t request_content_len = sdslen(request_content);
+            size_t request_content_len = sdslen(request_content);
             ssize_t bytes = write(PARENT_WRITE, request_content, request_content_len);
 
-			if(bytes != request_content_len) {
-				fprintf(stderr, "Error writing data to cliente. Written %zu, expected %zu\n", bytes, request_content_len);
-			}
+            if(bytes != request_content_len) {
+                fprintf(stderr, "Error writing data to cliente. Written %zu, expected %zu\n", bytes, request_content_len);
+            }
         }
 
         char buffer[2] = {0};
@@ -242,7 +242,7 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
         bool headers_end_found = false;
 
         // here we read the headers
-		int len = 0;
+        int len = 0;
         while(1) {
             ssize_t count = read(PARENT_READ, buffer, 1);
             if(count == -1) {
@@ -257,7 +257,7 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
             } else {
                 response_from_child = sdscatlen(response_from_child, buffer, count);
 
-				len++;
+                len++;
                 if(len >= 4) {
                     headers_end_found = (response_from_child[len - 4] == '\r' && response_from_child[len - 3] == '\n' && response_from_child[len - 2] == '\r' &&
                                          response_from_child[len - 1] == '\n');
@@ -277,8 +277,8 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
             send_header(socket, HEADER_INTERNAL_SERVER_ERROR, true, https);
         } else {
 
-        	bool header_error = false;
-        	int status_index = -1;
+            bool header_error = false;
+            int status_index = -1;
 
             int lines_count;
             sds *response_lines = sdssplitlen(response_from_child, sdslen(response_from_child), "\r\n", strlen("\r\n"), &lines_count);
@@ -458,10 +458,10 @@ void respond(int client_socket, bool https, bool verbose) {
     }
 
     // TODO: this is only the header. We need to read more after we get the content-length. This will be necessary when reading POST data;
-	int len = 0;
+    int len = 0;
     while((rcvd = server_read(socket_pointer, mesg, 1, https)) > 0) {
         request = sdscatlen(request, mesg, rcvd);
-		len += rcvd;
+        len += rcvd;
         if(len >= 4) {
             bool header_end = (request[len - 4] == '\r' && request[len - 3] == '\n' && request[len - 2] == '\r' && request[len - 1] == '\n');
             if(header_end)
@@ -851,11 +851,11 @@ int main(int argc, char *argv[]) {
 
     addrlen = sizeof(clientaddr);
 
-	while(1) {
-		if((client_socket = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) != -1) {
-			respond(client_socket, https, verbose);
-		}
-	}
+    while(1) {
+        if((client_socket = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) != -1) {
+            respond(client_socket, https, verbose);
+        }
+    }
 
     return 0;
 }
