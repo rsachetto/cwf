@@ -43,8 +43,8 @@ struct watch_entry {
 };
 
 struct cache_entry {
-	char *key;
-	struct static_file value;
+    char *key;
+    struct static_file value;
 };
 
 typedef struct cache_entry * file_cache;
