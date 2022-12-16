@@ -33,8 +33,8 @@ int main(int argc, char **argv) {
     }
 
     cwf_vars->templates_path = strdup(cwf_vars->document_root);
-	cwf_vars->static_path = malloc(strlen(cwf_vars->document_root) + strlen("/static/") + 1);
-	sprintf(cwf_vars->static_path, "%s%s", cwf_vars->document_root, "/static/");
+    cwf_vars->static_path = malloc(strlen(cwf_vars->document_root) + strlen("/static/") + 1);
+    sprintf(cwf_vars->static_path, "%s%s", cwf_vars->document_root, "/static/");
 
     sds site_config_file = sdsnew(cwf_vars->document_root);
 
@@ -127,11 +127,11 @@ int main(int argc, char **argv) {
     cwf_save_session(cwf_vars->session);
 
     //TODO: this would be needed only for fastCGI
-//    sdsfree(site_config_file);
-//    free_cwf_vars(cwf_vars);
-//
-//    if(endpoint_configs)
-//        free_endpoint_config_hash(endpoint_configs);
+    //sdsfree(site_config_file);
+    //free_cwf_vars(cwf_vars);
+
+    //if(endpoint_configs)
+    //  free_endpoint_config_hash(endpoint_configs);
 
     // TODO: maybe we will also need to release the file locks if the section is not readonly
     return 0;

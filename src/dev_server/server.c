@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <openssl/err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,7 +50,7 @@ static void load_mime_types(struct mime_type **mime_types_hash) {
     }
 }
 
-static int server_read(void *sock, void *buf, int bytes, bool ssl_enabled) {
+static inline int server_read(void *sock, void *buf, int bytes, bool ssl_enabled) {
     if(ssl_enabled) {
         SSL *ssl_sock = (SSL *)sock;
         return SSL_read(ssl_sock, buf, bytes);
@@ -403,7 +404,8 @@ void respond(int client_socket, bool https, bool verbose) {
     gettimeofday(&start, NULL);
 
     // TODO: change all this
-    char mesg[2] = {0};
+    #define BUFFER_SIZE 1024
+    char mesg[BUFFER_SIZE] = {0};
 
     sds request = sdsempty();
 
@@ -436,8 +438,9 @@ void respond(int client_socket, bool https, bool verbose) {
                 ERR_load_crypto_strings();
                 SSL_load_error_strings(); // just once
                 char msg[1024];
-                ERR_error_string_n(ERR_get_error(), msg, sizeof(msg));
-                printf("%s %s %s %s\n", msg, ERR_lib_error_string(0), ERR_func_error_string(0), ERR_reason_error_string(0));
+                unsigned long e = ERR_get_error();
+                ERR_error_string_n(e, msg, sizeof(msg));
+                printf("%s %s %s\n", msg, ERR_lib_error_string(e), ERR_reason_error_string(e));
 
                 // error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown
             }
@@ -459,14 +462,11 @@ void respond(int client_socket, bool https, bool verbose) {
 
     // TODO: this is only the header. We need to read more after we get the content-length. This will be necessary when reading POST data;
     int len = 0;
-    while((rcvd = server_read(socket_pointer, mesg, 1, https)) > 0) {
+    while((rcvd = server_read(socket_pointer, mesg, BUFFER_SIZE, https)) > 0) {
         request = sdscatlen(request, mesg, rcvd);
         len += rcvd;
-        if(len >= 4) {
-            bool header_end = (request[len - 4] == '\r' && request[len - 3] == '\n' && request[len - 2] == '\r' && request[len - 1] == '\n');
-            if(header_end)
-                break;
-        }
+        //TODO: is this correct?
+        if(rcvd < BUFFER_SIZE) break;
     }
 
     bool error = false;
@@ -561,28 +561,19 @@ void respond(int client_socket, bool https, bool verbose) {
                         }
                     }
 
-                    long received_data = 0;
-                    char buff[MAX_BUFFER_SIZE] = {0};
-                    sds request_content = sdsempty();
+                    const sds request_data = request_lines[lines_count-1];
 
-                    int bytes_to_read = (content_length > MAX_BUFFER_SIZE) ? MAX_BUFFER_SIZE : content_length;
+                    if(content_length == sdslen(request_data)) {
+                        if(verbose) {
+                            printf("%s\n", request_data);
+                        }
 
-                    while(received_data < content_length) {
-                        rcvd = server_read(socket_pointer, buff, bytes_to_read, https);
-                        request_content = sdscatlen(request_content, buff, rcvd);
-                        received_data += rcvd;
-                    }
+                        execute_cgi(socket_pointer, request_lines, request_data, lines_count, https, verbose);
 
-                    if(rcvd < 0) { // receive error
-                        fprintf(stderr, ("recv() error\n"));
-                    } else if(rcvd == 0) { // receive socket closed
-                        fprintf(stderr, "Client disconnected upexpectedly.\n");
                     } else {
-                        if(verbose)
-                            printf("%s\n", request_content);
-                        execute_cgi(socket_pointer, request_lines, request_content, lines_count, https, verbose);
+                        send_header(socket_pointer, HEADER_BAD_REQUEST, true, https);
+                        response_header_returned = HEADER_BAD_REQUEST;
                     }
-
                 } else {
                     send_header(socket_pointer, HEADER_BAD_REQUEST, true, https);
                     response_header_returned = HEADER_BAD_REQUEST;
