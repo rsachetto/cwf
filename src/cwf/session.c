@@ -149,7 +149,7 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
         sds sql;
         char *sid = (*session)->cookie->value;
 
-        sql = sdscatfmt(sdsempty(), "CREATE TABLE IF NOT EXISTS session_data_%s (key TEXT PRIMARY KEY, value TEXT);", sid);
+        sql = sdscatfmt(sdsempty(), "CREATE TABLE IF NOT EXISTS \"session_data_%s\" (key TEXT PRIMARY KEY, value TEXT);", sid);
         rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
 
         if(rc != SQLITE_OK) {
@@ -161,7 +161,7 @@ void cwf_session_start(cwf_session **session, http_header *headers, char *sessio
         }
         sdsfree(sql);
 
-        sql = sdscatfmt(sdsempty(), "SELECT key, value FROM session_data_%s;", sid);
+        sql = sdscatfmt(sdsempty(), "SELECT key, value FROM \"session_data_%s\";", sid);
         rc = execute_query_for_session(sql, session_file, &(*session)->data, &error);
 
         if(rc != SQLITE_OK) {
@@ -200,7 +200,7 @@ void cwf_session_destroy(cwf_session **session, http_header *headers) {
         (*session)->cookie->expires = -3600 * 24;
         add_cookie_to_header((*session)->cookie, headers);
 
-        sds sql = sdscatfmt(sdsempty(), "DROP TABLE session_data_%s;", (*session)->cookie->value);
+        sds sql = sdscatfmt(sdsempty(), "DROP TABLE \"session_data_%s\";", (*session)->cookie->value);
         rc = sqlite3_exec(session_file, sql, NULL, NULL, &error);
         sdsfree(sql);
 
@@ -242,7 +242,7 @@ void cwf_save_session(cwf_session *session) {
 
     for(int i = 0; i < len; i++) {
         query = sdscatfmt(
-            query, "INSERT INTO session_data_%s (key, value) VALUES ('%s', '%s') ON CONFLICT(key) DO UPDATE SET key = '%s', value = '%s' WHERE value <> '%s';",
+            query, "INSERT INTO \"session_data_%s\" (key, value) VALUES ('%s', '%s') ON CONFLICT(key) DO UPDATE SET key = '%s', value = '%s' WHERE value <> '%s';",
             session->cookie->value, session->data[i].key, session->data[i].value, session->data[i].key, session->data[i].value, session->data[i].value);
     }
 

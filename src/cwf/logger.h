@@ -4,7 +4,8 @@
 #define LOG_ERROR(format, ...)                                                                                                                                 \
     fprintf(stderr, "\033[1;31m");                                                                                                                             \
     logger("ERR", format, __VA_ARGS__);                                                                                                                        \
-    fprintf(stderr, "\033[0m");
+    fprintf(stderr, "\033[0m");                                                                                                                                \
+    fflush(stderr);
 
 #define LOG_INFO(format, ...)                                                                                                                                  \
     fprintf(stderr, "\033[1;34m");                                                                                                                             \
