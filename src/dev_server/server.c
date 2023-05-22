@@ -42,7 +42,7 @@ static void load_mime_types(struct mime_type **mime_types_hash) {
     sh_new_arena(*mime_types_hash);
 
     for(int i = 0; i < NUM_MIME_TYPES; i++) {
-        sds *extensions = sdssplitlen(mime_types_raw[i][1], sizeof(mime_types_raw[i][1]), " ", 1, &ext_number);
+        sds *extensions = sdssplitlen(mime_types_raw[i][1], strlen(mime_types_raw[i][1]), " ", 1, &ext_number);
         for(int j = 0; j < ext_number; j++) {
             shput(*mime_types_hash, extensions[j], mime_types_raw[i][0]);
         }
@@ -126,11 +126,11 @@ static void start_server(int port) {
 static void execute_cgi(void *socket, sds *request_headers, sds request_content, int num_headers, bool https, bool verbose) {
 
     // Macros for reading and writing in the child pipe
-    #define PARENT_READ readpipe[0]
-    #define CHILD_WRITE readpipe[1]
+#define PARENT_READ readpipe[0]
+#define CHILD_WRITE readpipe[1]
 
-    #define CHILD_READ writepipe[0]
-    #define PARENT_WRITE writepipe[1]
+#define CHILD_READ writepipe[0]
+#define PARENT_WRITE writepipe[1]
 
     int writepipe[2] = {-1, -1}, /* parent -> child */
         readpipe[2] = {-1, -1};  /* child -> parent */
@@ -261,7 +261,7 @@ static void execute_cgi(void *socket, sds *request_headers, sds request_content,
                 len++;
                 if(len >= 4) {
                     headers_end_found = (response_from_child[len - 4] == '\r' && response_from_child[len - 3] == '\n' && response_from_child[len - 2] == '\r' &&
-                                         response_from_child[len - 1] == '\n');
+                            response_from_child[len - 1] == '\n');
                     if(headers_end_found)
                         break;
                 }
@@ -404,8 +404,7 @@ void respond(int client_socket, bool https, bool verbose) {
     gettimeofday(&start, NULL);
 
     // TODO: change all this
-    #define BUFFER_SIZE 1024
-    char mesg[BUFFER_SIZE] = {0};
+    char mesg[2] = {0};
 
     sds request = sdsempty();
 
@@ -462,11 +461,28 @@ void respond(int client_socket, bool https, bool verbose) {
 
     // TODO: this is only the header. We need to read more after we get the content-length. This will be necessary when reading POST data;
     int len = 0;
-    while((rcvd = server_read(socket_pointer, mesg, BUFFER_SIZE, https)) > 0) {
-        request = sdscatlen(request, mesg, rcvd);
-        len += rcvd;
-        //TODO: is this correct?
-        if(rcvd < BUFFER_SIZE) break;
+
+    while(true) {
+        rcvd = server_read(socket_pointer, mesg, 1, https);
+        if(rcvd == -1) {
+            if(errno == EINTR) {
+                continue;
+            } else {
+                perror("reading from socket");
+                exit(EXIT_FAILURE);
+            }
+        } else if(rcvd == 0) {
+            break;
+        } else {
+
+            request = sdscatlen(request, mesg, rcvd);
+            len++;
+            if(len >= 4) {
+                bool headers_end_found = (request[len - 4] == '\r' && request[len - 3] == '\n' && request[len - 2] == '\r' && request[len - 1] == '\n');
+                if(headers_end_found)
+                    break;
+            }
+        }
     }
 
     bool error = false;
@@ -558,10 +574,12 @@ void respond(int client_socket, bool https, bool verbose) {
                         if(strncmp(request_lines[i], "Content-Length:", 15) == 0) {
                             char *ptr = strchr(request_lines[i], ':');
                             content_length = strtol(ptr + 1, NULL, 10);
+                            break;
                         }
                     }
 
-                    const sds request_data = request_lines[lines_count-1];
+                    sds request_data = sdsnewlen(NULL, content_length);
+                    rcvd = server_read(socket_pointer, request_data, content_length, https);
 
                     if(content_length == sdslen(request_data)) {
                         if(verbose) {
@@ -569,6 +587,7 @@ void respond(int client_socket, bool https, bool verbose) {
                         }
 
                         execute_cgi(socket_pointer, request_lines, request_data, lines_count, https, verbose);
+                        sdsfree(request_data);
 
                     } else {
                         send_header(socket_pointer, HEADER_BAD_REQUEST, true, https);
@@ -666,7 +685,7 @@ static void *check_for_cached_file_changes(void *args) {
 
             if(event->len) {
 
-             if ( event->mask & IN_DELETE ) {
+                if ( event->mask & IN_DELETE ) {
                     if ( event->mask & IN_ISDIR ) {
                     }
                     else {
@@ -774,40 +793,40 @@ int main(int argc, char *argv[]) {
     // Parsing the command line arguments
     while((c = getopt(argc, argv, "p:r:vs")) != -1) {
         switch(c) {
-        case 'r': {
-            int arglen = strlen(optarg);
-            if(optarg[arglen - 1] != '/') {
-                ROOT = malloc(arglen + 2);
-                strcpy(ROOT, optarg);
-                ROOT[arglen] = '/';
-                ROOT[arglen + 1] = '\0';
-            } else {
-                ROOT = strdup(optarg);
-            }
-        } break;
-        case 'p':
-            port = strtol(optarg, NULL, 10);
-            if(port < 1 || port > 65535) {
-                fprintf(stderr, "Invalid port number %d. Valid values are from 1 to 65535\n", port);
-                exit(1);
-            } else if(port < 1024) {
-                if(uid > 0 && uid == euid) {
-                    fprintf(stderr, "Invalid port number %d. You need to be root to open a port < 1024", port);
-                    exit(1);
-                }
-            }
-            break;
-        case 'v':
-            verbose = true;
-            break;
-        case 's':
-            https = true;
-            break;
-        case '?':
-            fprintf(stderr, "Usage: %s -p PORT -r ROOT\n", argv[0]);
-            exit(1);
-        default:
-            exit(1);
+            case 'r': {
+                          int arglen = strlen(optarg);
+                          if(optarg[arglen - 1] != '/') {
+                              ROOT = malloc(arglen + 2);
+                              strcpy(ROOT, optarg);
+                              ROOT[arglen] = '/';
+                              ROOT[arglen + 1] = '\0';
+                          } else {
+                              ROOT = strdup(optarg);
+                          }
+                      } break;
+            case 'p':
+                      port = strtol(optarg, NULL, 10);
+                      if(port < 1 || port > 65535) {
+                          fprintf(stderr, "Invalid port number %d. Valid values are from 1 to 65535\n", port);
+                          exit(1);
+                      } else if(port < 1024) {
+                          if(uid > 0 && uid == euid) {
+                              fprintf(stderr, "Invalid port number %d. You need to be root to open a port < 1024", port);
+                              exit(1);
+                          }
+                      }
+                      break;
+            case 'v':
+                      verbose = true;
+                      break;
+            case 's':
+                      https = true;
+                      break;
+            case '?':
+                      fprintf(stderr, "Usage: %s -p PORT -r ROOT\n", argv[0]);
+                      exit(1);
+            default:
+                      exit(1);
         }
     }
 
@@ -835,7 +854,7 @@ int main(int argc, char *argv[]) {
 
     if(https) {
         printf("HTTPS server started at port no. %shttp://localhost:%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT,
-               "\033[0m");
+                "\033[0m");
     } else {
         printf("HTTP server started at %shttp://localhost:%d%s with root directory as %s%s%s\n", "\033[92m", port, "\033[0m", "\033[92m", ROOT, "\033[0m");
     }

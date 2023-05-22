@@ -12,7 +12,7 @@ release_set:
 	$(eval OPT_FLAGS2=${OPT_RELEASE})
 
 debug_set:
-	$(eval OPT_FLAGS="-g3 -DDEBUG_CGI -Wall")
+	$(eval OPT_FLAGS="-g3 -DDEBUG_CGI -Wall" )
 	$(eval OPT_FLAGS2=-g3)
 	$(eval ENABLE_BACKTRACE=-DENABLE_BACKTRACE)
 
