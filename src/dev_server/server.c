@@ -579,7 +579,15 @@ void respond(int client_socket, bool https, bool verbose) {
                     }
 
                     sds request_data = sdsnewlen(NULL, content_length);
-                    rcvd = server_read(socket_pointer, request_data, content_length, https);
+                    long total_rcvd = 0;
+                    while (total_rcvd < content_length) {
+                        rcvd = server_read(socket_pointer, request_data + total_rcvd, content_length - total_rcvd, https);
+                        if (rcvd <= 0) {
+                            if (rcvd < 0 && errno == EINTR) continue;
+                            break;
+                        }
+                        total_rcvd += rcvd;
+                    }
 
                     if(content_length == sdslen(request_data)) {
                         if(verbose) {

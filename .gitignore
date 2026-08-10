@@ -60,6 +60,7 @@ bin/server
 .idea/
 provas/
 provas_django/
+gerenciador_de_despesas/
 todo_list/cert.pem
 todo_list/cert2.key
 todo_list/key.pem

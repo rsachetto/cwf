@@ -71,16 +71,23 @@ static void decode_query(request_item **v, const char *query) {
 }
 
 static void get_post(cwf_request *r, int len, char *type) {
-    char *buf;
+    
+    char *buf = (char *)malloc(len + 1);
+    if (!buf) return;
 
-    buf = (char *)malloc(len + 1);
-    if(fread(buf, 1, len, stdin) == len) {
-        buf[len] = 0;
-        if(strncmp(type, "urlencoded", 10) == 0) {
-            // fprintf(stderr, "%d %s\n", len, buf);
+    int total_read = 0;
+    while (total_read < len) {
+        int n = fread(buf + total_read, 1, len - total_read, stdin);
+        if (n <= 0) break;
+        total_read += n;
+    }
+    buf[total_read] = 0;
+
+    if (total_read > 0) {
+        if (strncmp(type, "urlencoded", 10) == 0) {
             decode_query(&(r->urlencoded_data), buf);
-        } else if(strncmp(type, "json", 4) == 0) {
-            r->json_data = json_parse((json_char *)buf, len);
+        } else if (strncmp(type, "json", 4) == 0) {
+            r->json_data = json_parse((json_char *)buf, total_read);
         }
     }
     free(buf);
