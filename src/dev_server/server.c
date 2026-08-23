@@ -782,7 +782,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in clientaddr;
     socklen_t addrlen;
     int client_socket;
-    char c;
+    int c;
 
     bool verbose = false;
     bool https = false;
